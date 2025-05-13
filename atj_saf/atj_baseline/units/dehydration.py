@@ -41,9 +41,7 @@ class DehydrationReactor(qs.SanUnit):
         'Vessel Weight': 'lb',
         'Duty': 'kJ/hr'}
     
-    _F_BM_default: {'Horizontal pressure vessel': 3.05,
-                    'Platform and ladders': 1}
-    
+   
 
     def __init__(self, ID = '', ins = None, outs = (), thermo = None, init_with = 'SanStream',
                  uptime_ratio = 0.9,
