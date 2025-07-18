@@ -5,20 +5,27 @@ from atj_saf import atj_baseline
 #import atj_chemicals
 
 from atj_chemicals import *
+from data.feed_conditions import *
+from units.etoh_storage_tank import *
+
 
 qs.set_thermo(chemicals) # assigning pure chemical thermo properties to the chemicals
 
 etoh_in = qs.SanStream(
     'etoh_in',
     Ethanol = 100,
-    Water =  100*((1-0.995)/(0.995)),
+    Water =  100*((1-feed_parameters['purity'])/(feed_parameters['purity'])),
     units = 'kg/hr',
-    T = 323.15,
-    P = 101325,
-    phase = 'l',
+    T = feed_parameters['temperature'],
+    P = feed_parameters['pressure'],
+    phase = feed_parameters['phase'],
     price = 0.90) # 2.75/gal
 
 etoh_in.show(composition = True)
+
+etoh_storage = EthanolStorageTank(ins = etoh_in)
+etoh_storage.simulate()
+
 
 '''
 chem = qs.Chemicals(['Water', 'Ethanol'], cache = True)
