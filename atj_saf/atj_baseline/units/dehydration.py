@@ -1,6 +1,6 @@
 import math
 import qsdsan as qs
-from atj_saf.atj_baseline.atj_chemicals import create_chemicals
+#from atj_saf.atj_baseline.atj_chemicals import create_chemicals
 class DehydrationReactor(qs.SanUnit):
 
     '''
@@ -36,7 +36,7 @@ class DehydrationReactor(qs.SanUnit):
         'Volume': 'L',
         'Pressure': 'psi',
         'Length': 'ft',
-        'Diameter': 'ft',
+        'Diameter': 'ft', 
         'Wall thickness': 'in',
         'Vessel Weight': 'lb',
         'Duty': 'kJ/hr'}
