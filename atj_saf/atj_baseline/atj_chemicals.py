@@ -1,4 +1,7 @@
+
+
 import qsdsan as qs
+
 chemicals = qs.Chemicals(
     ['Water', 
     'Ethanol', 
@@ -24,5 +27,3 @@ chemicals = qs.Chemicals(
     'Eicosane',
     'Hydrogen'], cache = True)
 
-
-qs.set_thermo(chemicals)
