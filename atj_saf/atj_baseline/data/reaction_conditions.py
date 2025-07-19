@@ -1,3 +1,8 @@
+
+import biosteam as bst, qsdsan as qs
+
+
+
 dehydration_parameters = {
     'dehyd_temp' : 481+273.15,   
     'dehyd_pressure' : 1.063e6, 
@@ -5,6 +10,8 @@ dehydration_parameters = {
     'dehyd_WHSV' : 0.3,
     'catalyst_lifetime' : 2 
 }
+
+
 
 
 oligomerization_parameters = {

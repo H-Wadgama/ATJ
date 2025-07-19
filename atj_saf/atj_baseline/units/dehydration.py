@@ -1,6 +1,5 @@
-import math
-import qsdsan as qs
-#from atj_saf.atj_baseline.atj_chemicals import create_chemicals
+import math, qsdsan as qs, math
+
 class DehydrationReactor(qs.SanUnit):
 
     '''
@@ -36,17 +35,18 @@ class DehydrationReactor(qs.SanUnit):
         'Volume': 'L',
         'Pressure': 'psi',
         'Length': 'ft',
-        'Diameter': 'ft', 
+        'Diameter': 'ft',
         'Wall thickness': 'in',
         'Vessel Weight': 'lb',
         'Duty': 'kJ/hr'}
     
-   
+    #_F_BM_default: {'Horizontal pressure vessel': 3.05,
+    #                'Platform and ladders': 1}
+    
 
     def __init__(self, ID = '', ins = None, outs = (), thermo = None, init_with = 'SanStream',
-                 uptime_ratio = 0.9,
-        conversion = 0.989, temperature = 553.15, pressure = 101325, WHSV = 1.5, 
-        aspect_ratio = 3.0, catalyst_density  = 0.72, catalyst_price = 145.2):
+                 uptime_ratio = 0.9, conversion = 0.995, temperature = 481+273.15, pressure = 1301325, WHSV = 0.3, 
+        aspect_ratio = 3.0, catalyst_density = 0.72, catalyst_price = 145.2, catalyst_lifetime = 1, *, reaction):
         
         qs.SanUnit.__init__(self, ID, ins, outs, thermo, init_with)
         self.uptime_ratio = uptime_ratio
@@ -58,17 +58,19 @@ class DehydrationReactor(qs.SanUnit):
         self.aspect_ratio = aspect_ratio
         self.catalyst_density = catalyst_density
         self.catalyst_price = catalyst_price
+        self.catalyst_lifetime = catalyst_lifetime
+        self.reaction = reaction
 
-    def _run(self):
+    def _run(self): 
         inf, = self.ins
         eff, = self.outs
-        x = self.conversion
-        eff.imol['Ethanol'] = (1-x)*inf.imol['Ethanol']
-        eff.imol['Ethylene'] = x*inf.imol['Ethanol']
-        eff.imol['Water'] = inf.imol['Water'] + x*inf.imol['Ethanol']
-        eff.phase = 'g'
+        self.reaction(eff)
+        eff.copy_like(inf)
+        self.reaction.adiabatic_reaction(eff)
+        
 
 
+        
     def _design(self):
         D = self.design_results
         feed_flow = self.ins[0].F_mass
@@ -139,10 +141,10 @@ class DehydrationReactor(qs.SanUnit):
         VW = round(VW, 2)
 
         # Adding utility
-        self.outs[0].T= self.ins[0].T
+        # self.outs[0].T= self.ins[0].T
         # duty =  self.outs[0].H - self.ins[0].H + self.outs[0].Hf - self.ins[0].Hf
         duty =  self.outs[0].H - self.ins[0].H + self.outs[0].Hf - self.ins[0].Hf
-        if duty < 0: raise RuntimeError(f'{repr(self)} is cooling.') # Duty must be greater than 0
+        #if duty < 0: raise RuntimeError(f'{repr(self)} is cooling.') # Duty must be greater than 0
         
         D['Catalyst Weight'] = catalyst_weight
         D['Volume'] = reactor_volume
@@ -160,16 +162,16 @@ class DehydrationReactor(qs.SanUnit):
         #self.baseline_purchase_costs.update(purchase_costs)
         
         lnW = math.log(D['Vessel Weight'])
-        C_v = math.exp(5.6336 + 0.4599 * lnW + 0.00582 * lnW * lnW)
+        C_v = 2.0*(math.exp(5.6336 + 0.4599 * lnW + 0.00582 * lnW * lnW))
         C_pl = 2275.*D['Diameter']**0.20294
         purchase_costs['Horizontal pressure vessel'] = C_v
         purchase_costs['Platform and ladders'] = C_pl
         purchase_costs['Catalyst'] = self.catalyst_price * D['Catalyst Weight']
         #print(self.add_heat_utility)
-        heat_utility = self.add_heat_utility(D['Duty'], self.temperature, self.temperature,heat_transfer_efficiency = 1)
+        ####heat_utility = self.add_heat_utility(D['Duty'], self.temperature, self.temperature,heat_transfer_efficiency = 1)
         #utility_cost = 2    # change duty
         #self.power_utility(utility_cost*D['Duty'])
-        add_OPEX = (D['Catalyst Weight']*self.catalyst_price)/(365*24*self.uptime_ratio)
+        add_OPEX = (D['Catalyst Weight']*self.catalyst_price)/(365*24*self.uptime_ratio*self.catalyst_lifetime) # assuming replacement in 2 years
         self._add_OPEX = {'Additional OPEX': add_OPEX}          
          
 # getter setter to ensure values of conversion 0 < x < 1
