@@ -1,9 +1,29 @@
-import qsdsan as qs, biosteam as bst, math
+import qsdsan as qs
+import math
+from atj_saf.atj_baseline import atj_chemicals
 
-class OligomerizationReactor(qs.SanUnit):
-
+class DehydrationReactor(qs.SanUnit):
     '''
-    Reactor for ethanol conversion to ethylene to oligomers
+    Reactor for ethanol conversion to ethylene and water.
+    Conditions for reaction are mostly obtained from [1].
+
+    Parameters
+    ----------
+    ins : Inlet stream containing ethanol water mixture
+    outs : Outlet stream containing consumed ethanol, water and ethylene
+    conversion : defaults to 98.9% conversion for HZSM-5-deAl-1/100
+    temperature : defaults to 280 C 
+    pressure : defaults to 1 bar
+    WHSV : weighted hourly space velocity (ratio of hourly feed flow to the catalyst weight)
+    aspect_ratio : length to diameter ratio defaults to 3.0
+    catalyst_density : defaults to 0.72 kg/L for HZSM-5
+    catalyst_price : defaults to 145.2 USD/kg for HZSM-5
+
+    Reference
+    ---------
+    [1] Wu, C. Y., & Wu, H. S. (2017). 
+    Ethylene formation from ethanol dehydration using ZSM-5 catalyst. 
+    ACS omega, 2(8), 4287-4296.
     
     '''
 
@@ -20,15 +40,19 @@ class OligomerizationReactor(qs.SanUnit):
         'Wall thickness': 'in',
         'Vessel Weight': 'lb',
         'Duty': 'kJ/hr'}
+    
+    #_F_BM_default: {'Horizontal pressure vessel': 3.05,
+    #                'Platform and ladders': 1}
+    
 
     def __init__(self, ID = '', ins = None, outs = (), thermo = None, init_with = 'SanStream',
                  uptime_ratio = 0.9,
-        conversion = 1.0, 
-                 temperature = 393.15, pressure = 3e+6, WHSV = 1.5, 
-        aspect_ratio = 3.0, catalyst_density  = 0.4, catalyst_price = 145.2, catalyst_lifetime = 1, *, reaction):
+        conversion = 0.989, temperature = 553.15, pressure = 101325, WHSV = 1.5, 
+        aspect_ratio = 3.0, catalyst_density  = 0.72, catalyst_price = 145.2):
         
         qs.SanUnit.__init__(self, ID, ins, outs, thermo, init_with)
         self.uptime_ratio = uptime_ratio
+
         self.conversion = conversion
         self.temperature = temperature
         self.pressure = pressure
@@ -36,34 +60,19 @@ class OligomerizationReactor(qs.SanUnit):
         self.aspect_ratio = aspect_ratio
         self.catalyst_density = catalyst_density
         self.catalyst_price = catalyst_price
-        self.catalyst_lifetime = catalyst_lifetime
-        self.reaction = reaction
-        
 
     def _run(self):
         inf, = self.ins
         eff, = self.outs
-        #self.reaction(eff)
-        eff.mix_from(self.ins)
-        #eff.copy_like(inf)
-        self.reaction(eff)
-        
-        #eff.phase = recycle.phase = 'g'
-        #eff.T = inf.T
-        eff.P = inf.P
-        #eff.T = inf.T
-        #eff.phase = 'g'
-        
-        #eff.temperature = recycle.temperature = self.temperature
-        #eff.pressure = recycle.pressure = self.pressure
-        # eff.vle(
-        # Oligomerization outlet phase should be liquid like Aspen, but I need to include capability to compute VLE
-        
-        #eff.P = inf.P
-        
+        x = self.conversion
+        eff.imol['Ethanol'] = (1-x)*inf.imol['Ethanol']
+        eff.imol['Ethylene'] = x*inf.imol['Ethanol']
+        eff.imol['Water'] = inf.imol['Water'] + x*inf.imol['Ethanol']
+        eff.phase = 'g'
+
+
     def _design(self):
         D = self.design_results
-        #inf, c2h4 = self.ins
         feed_flow = self.ins[0].F_mass
         catalyst_weight = feed_flow/self.WHSV 
         reactor_volume = (catalyst_weight/self.catalyst_density)*1.15 #15% extra for volume
@@ -135,7 +144,7 @@ class OligomerizationReactor(qs.SanUnit):
         self.outs[0].T= self.ins[0].T
         # duty =  self.outs[0].H - self.ins[0].H + self.outs[0].Hf - self.ins[0].Hf
         duty =  self.outs[0].H - self.ins[0].H + self.outs[0].Hf - self.ins[0].Hf
-        # duty < 0: raise RuntimeError(f'{repr(self)} is cooling.') # Duty must be greater than 0
+        if duty < 0: raise RuntimeError(f'{repr(self)} is cooling.') # Duty must be greater than 0
         
         D['Catalyst Weight'] = catalyst_weight
         D['Volume'] = reactor_volume
@@ -149,21 +158,22 @@ class OligomerizationReactor(qs.SanUnit):
     def _cost(self):
         D = self.design_results
         purchase_costs = self.baseline_purchase_costs
-        utility = self.add_heat_utility
+        #utility = self.add_heat_utility
         #self.baseline_purchase_costs.update(purchase_costs)
         
         lnW = math.log(D['Vessel Weight'])
-        C_v = 2.0*(math.exp(5.6336 + 0.4599 * lnW + 0.00582 * lnW * lnW))
+        C_v = math.exp(5.6336 + 0.4599 * lnW + 0.00582 * lnW * lnW)
         C_pl = 2275.*D['Diameter']**0.20294
-        purchase_costs['Horizontal pressure vessel'] = C_v # 2.1 as vessel will be SS312 https://pubs.acs.org/doi/10.1021/i100018a019
+        purchase_costs['Horizontal pressure vessel'] = C_v
         purchase_costs['Platform and ladders'] = C_pl
         purchase_costs['Catalyst'] = self.catalyst_price * D['Catalyst Weight']
+        #print(self.add_heat_utility)
+        heat_utility = self.add_heat_utility(D['Duty'], self.temperature, self.temperature,heat_transfer_efficiency = 1)
         #utility_cost = 2    # change duty
         #self.power_utility(utility_cost*D['Duty'])
-        heat_utility = self.add_heat_utility(D['Duty'], self.temperature, heat_transfer_efficiency = 1)
-        add_OPEX = (D['Catalyst Weight']*self.catalyst_price)/(365*24*self.uptime_ratio*self.catalyst_lifetime)
-        self._add_OPEX = {'Additional OPEX': add_OPEX}        
-     
+        add_OPEX = (D['Catalyst Weight']*self.catalyst_price)/(365*24*self.uptime_ratio)
+        self._add_OPEX = {'Additional OPEX': add_OPEX}          
+         
 # getter setter to ensure values of conversion 0 < x < 1
     @property
     def conversion(self):
@@ -175,3 +185,4 @@ class OligomerizationReactor(qs.SanUnit):
             raise AttributeError('`conversion` must be within [0, 1], '
                                     f'the provided value {i} is outside this range.')
         self._conversion = i
+
