@@ -1,0 +1,2 @@
+7/20/2025 @ 11:30 AM
+Whenever I set rigorous = True for any unit operation, it is seemingly supressing the output. I don't know why this happens but it does, and I can't even print hello once any unit operation is set as rigorous = True
