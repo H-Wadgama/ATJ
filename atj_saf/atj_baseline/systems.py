@@ -43,14 +43,15 @@ etoh_storage.simulate()
 pump_1 = Pump('PUMP1', ins = etoh_storage.outs[0], P = 1373000)    # Pressure from the patent
 pump_1.simulate()
 
-furnace_1 = _heat_exchanging.HXutility('FURNACE_1', ins = pump_1.outs[0], T = 500, rigorous = True)
+furnace_1 = _heat_exchanging.HXutility('FURNACE_1', ins = pump_1.outs[0], T = 500, rigorous = False)
 furnace_1.simulate()
 
-mixer_1 = qs.sanunits.Mixer('MIXER_1', ins = (furnace_1.outs[0], dehyd_recycle), rigorous = True, init_with = 'MultiStream')
+mixer_1 = qs.sanunits.Mixer('MIXER_1', ins = (furnace_1.outs[0], dehyd_recycle), rigorous = False, init_with = 'MultiStream')
 mixer_1.simulate()
 
-furnace_2 =  _heat_exchanging.HXutility('FURNACE_01', ins = mixer_1.outs[0], T = 481+ 273.15, rigorous = True)
+furnace_2 =  _heat_exchanging.HXutility('FURNACE_02', ins = mixer_1.outs[0], T = 481+ 273.15, rigorous = False)
 furnace_2.simulate()
+
 
 dehydration_rxn = bst.Reaction('Ethanol -> Water + Ethylene', reactant = 'Ethanol', 
                                X = dehydration_parameters['dehyd_conv'], basis = 'mol')
@@ -62,18 +63,27 @@ dehyd_1 = DehydrationReactor('DEHYD_1', ins = furnace_2.outs[0],
                           pressure = dehydration_parameters['dehyd_pressure'],
                           WHSV = dehydration_parameters['dehyd_WHSV'],
                           catalyst_price=price_data['dehydration_catalyst'], 
-                          catalyst_lifetime = dehydration_parameters['catalyst_lfetime'],
+                          catalyst_lifetime = dehydration_parameters['catalyst_lifetime'],
                             reaction = dehydration_rxn)
 dehyd_1.simulate()
 
+dehyd_1.outs[0]
+
+
+
+
+'''
 splitter_1 = qs.sanunits.Splitter('SPLIT_1', ins = dehyd_1.outs[0], outs = ('flash_in', dehyd_recycle), split = 0.3, init_with = 'MultiStream')
 splitter_1.simulate()
+splitter_1.outs[0].show()
+
 
 flash_1 = qs.sanunits.Flash('FLASH_1', ins = splitter_1.outs[0], outs = ('ETHYLENE_WATER', 'WW_1'), T= 420,  P = 1.063e6)
 flash_1.simulate()
 
 comp_1 = Compressor('COMP_1', ins = flash_1.outs[0], P = 2e6, vle = True, eta = 0.72, driver_efficiency = comp_driver_efficiency)
 comp_1.simulate()
+
 
 distillation_1 = qs.sanunits.BinaryDistillation('DISTILLATION_1', ins = comp_1.outs[0], 
                                                 outs = ('ethylene_water', 'WW'),
@@ -83,6 +93,7 @@ distillation_1 = qs.sanunits.BinaryDistillation('DISTILLATION_1', ins = comp_1.o
                                     is_divided = True)
 distillation_1.check_LHK = False
 distillation_1.simulate()
+
 
 comp_2 = Compressor('COMP_2', ins = distillation_1.outs[0], P = 3.5e6, vle = True, eta = 0.72, driver_efficiency = comp_driver_efficiency)
 comp_2.simulate()
@@ -95,7 +106,7 @@ distillation_2 = qs.sanunits.BinaryDistillation('DISTILLATION_2', ins = comp_2.o
 distillation_2.simulate()
 
 
-cooler_1 = _heat_exchanging.HXutility('COOLER_1', ins = distillation_2.outs[1], outs = 'WW_2', T = 300, rigorous = True)
+cooler_1 = _heat_exchanging.HXutility('COOLER_1', ins = distillation_2.outs[1], outs = 'WW_2', T = 300, rigorous = False)
 cooler_1.simulate()
 
 splitter_2 = qs.sanunits.Splitter('SPLIT_2', ins = distillation_1.outs[1], split = 0.6, init_with = 'MultiStream')
@@ -104,15 +115,15 @@ splitter_2.simulate()
 hx_2 = _heat_exchanging.HXprocess('HX_2', ins = (distillation_2.outs[0], splitter_2.outs[0]), init_with = 'MultiStream')
 hx_2.simulate()
 
-cooler_2 = _heat_exchanging.HXutility('COOLER_2', ins = hx_2.outs[1], outs = 'WW_3', T = 300, rigorous = True)
+cooler_2 = _heat_exchanging.HXutility('COOLER_2', ins = hx_2.outs[1], outs = 'WW_3', T = 300, rigorous = False)
 cooler_2.simulate()
 
-cooler_3 = _heat_exchanging.HXutility('COOLER_3', ins = hx_2.outs[0], T = 393.15, rigorous = True)
+cooler_3 = _heat_exchanging.HXutility('COOLER_3', ins = hx_2.outs[0], T = 393.15, rigorous = False)
 cooler_3.simulate()
 
 ethylene_recycle = qs.SanStream('ethylene_recycle')
 
-mixer_3 = qs.sanunits.Mixer(ID = 'MIXER_3', ins = (cooler_3.outs[0],ethylene_recycle), rigorous = True, init_with = 'MultiStream')
+mixer_3 = qs.sanunits.Mixer(ID = 'MIXER_3', ins = (cooler_3.outs[0],ethylene_recycle), rigorous = False, init_with = 'MultiStream')
 mixer_3.simulate()
 
 oligomerization_rxn = bst.ParallelReaction([
@@ -132,4 +143,5 @@ olig_1 = OligomerizationReactor('OLIG_1', ins = mixer_3.outs[0], init_with = 'Mu
 
 olig_1.simulate()
 
-olig_1.results()
+
+olig_1.outs[0].show()
