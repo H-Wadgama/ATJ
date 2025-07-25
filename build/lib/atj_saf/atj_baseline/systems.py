@@ -1,4 +1,8 @@
+import sys
+import os
 
+# Add project root to sys.path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '.')))
 
 import qsdsan as qs, biosteam as bst, thermosteam as tmo, numpy as np, pandas as pd
 from qsdsan.sanunits import _heat_exchanging
@@ -44,8 +48,6 @@ etoh_storage.simulate()
 
 pump_1 = Pump('PUMP1', ins = etoh_storage.outs[0], P = 1373000)    # Pressure from the patent
 pump_1.simulate()
-
-pump_1.outs[0].show()
 '''
 furnace_1 = _heat_exchanging.HXutility('FURNACE_1', ins = pump_1.outs[0], T = 500, rigorous = False)
 furnace_1.simulate()
