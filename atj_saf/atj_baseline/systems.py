@@ -16,13 +16,16 @@ def create_atj_system():
     from .data.feed_conditions import feed_parameters
     from .data.catalytic_reaction_data import dehyd_data, olig_data, hydgn_data, prod_selectivity
     from .data.prices import price_data
+    from .data.utils import calculate_ethanol_flow
 
     qs.set_thermo(chemicals) # assigning pure chemical thermo properties to the chemicals
 
+    saf_required = 9 # MM gal/yr
+
     etoh_in = qs.SanStream(
         'etoh_in',
-        Ethanol = 100,
-        Water =  100*((1-feed_parameters['purity'])/(feed_parameters['purity'])),
+        Ethanol = calculate_ethanol_flow(saf_required),
+        Water =  calculate_ethanol_flow(saf_required)*((1-feed_parameters['purity'])/(feed_parameters['purity'])),
         units = 'kg/hr',
         T = feed_parameters['temperature'],
         P = feed_parameters['pressure'],
@@ -131,10 +134,13 @@ def create_atj_system():
     hx_1 = _heat_exchanging.HXprocess('HX_1', ins = (distillation_2.outs[0], splitter_2.outs[0]), init_with = 'MultiStream')
     hx_1.simulate()
 
-    cooler_2 = _heat_exchanging.HXutility('COOLER_2', ins = hx_1.outs[0], outs = 'WW_3', T = 300, rigorous = True)
+    cooler_2 = _heat_exchanging.HXutility('COOLER_2', ins = hx_1.outs[1], outs = 'WW_3', T = 300, rigorous = True)
     cooler_2.simulate()
 
-    mixer_2 = qs.sanunits.Mixer(ID = 'MIXER_3', ins = (cooler_2.outs[0],ethylene_recycle), rigorous = True, init_with = 'MultiStream')
+    cooler_3 = _heat_exchanging.HXutility('COOLER_3', ins = hx_1.outs[0], T = 393.15, rigorous = True)
+    cooler_3.simulate()
+
+    mixer_2 = qs.sanunits.Mixer(ID = 'MIXER_3', ins = (cooler_3.outs[0],ethylene_recycle), rigorous = True, init_with = 'MultiStream')
     mixer_2.simulate()
 
     olig_1 = IsothermalReactor('OLIG_1', ins = mixer_2.outs[0], init_with = 'MultiStream',
@@ -196,11 +202,50 @@ def create_atj_system():
     psa_hydrogen = PressureSwingAdsorption('PSA', ins = h_none.outs[0], outs = (h2_recycle, 'fuel'), split = {'Hydrogen':1},  init_with = 'MultiStream')
     psa_hydrogen.simulate()
 
+    distillation_3 = qs.sanunits.BinaryDistillation('DISTILLATION_3', ins = psa_hydrogen.outs[1],
+                                    outs = ('distillate', 'bottoms'),
+                                    LHK = ('Hexane', 'Decane'),
+                                    y_top = 0.99, x_bot = 0.01, k = 2,
+                                    is_divided = True)
+    distillation_3.check_LHK = False
+    distillation_3.simulate()
+
+    distillation_4 = qs.sanunits.BinaryDistillation('DISTILLATION_4', ins = distillation_3.outs[1],
+                                    outs = ('distillate_1', 'bottoms_1'),
+                                    LHK = ('Decane', 'Octadecane'),
+                                    y_top = 0.99, x_bot = 0.01, k = 2,
+                                    is_divided = True)
+    distillation_4.simulate()
+
+    cooler_6 = _heat_exchanging.HXutility('COOLER_6', ins = distillation_3.outs[0]
+                              ,V = 0, rigorous = True)
+    cooler_6.simulate()
+
+
+    cooler_7 = _heat_exchanging.HXutility('COOLER_7', ins = distillation_4.outs[0],T = 15+273.15, rigorous = True)
+    cooler_7.simulate()
+
+    cooler_8 = _heat_exchanging.HXutility('COOLER_8', ins = distillation_4.outs[1],T = 15+273.15, rigorous = True)
+    cooler_8.simulate()
+
+
+    rn_storage = HydrocarbonProductTank('RN_STORAGE', ins = cooler_6.outs[0], outs = 'RN',  init_with = 'MultiStream')
+    rn_storage.simulate()
+
+    saf_storage = HydrocarbonProductTank('SAF_STORAGE', ins = cooler_7.outs[0], outs = 'SAF', init_with = 'MultiStream')
+    saf_storage.simulate()
+
+
+    rd_storage = HydrocarbonProductTank('RD_STORAGE', ins = cooler_8.outs[0], outs = 'RD', init_with = 'MultiStream')
+    rd_storage.simulate()
+
 
     my_sys = qs.System('my_sys', path = (etoh_storage, pump_1, furnace_1, mixer_1, furnace_2, dehyd_1, splitter_1, flash_1, comp_1, 
-                                         distillation_1, comp_2, distillation_2, cooler_1, splitter_2, hx_2, cooler_2, mixer_2,
+                                         distillation_1, comp_2, distillation_2, cooler_1, splitter_2, hx_1, cooler_2, cooler_3, mixer_2,
                                          olig_1, splitter_3, mixer_3, h2_storage, mixer_4, hx_2, cooler_4, furnace_3, hydgn_1, cooler_5, 
-                                         h_none, psa_hydrogen ))
+                                         h_none, psa_hydrogen, distillation_3, distillation_4, cooler_6, cooler_7, cooler_8,
+                                         rn_storage, saf_storage, rd_storage), 
+                                         recycle = (dehyd_recycle, ethylene_recycle, h2_recycle))
 
     
     
