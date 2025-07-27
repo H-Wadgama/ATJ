@@ -47,3 +47,11 @@ def ethanol_price_converter(price):
     updated_price = (price*264.172)/789  # 789 is the density of ethanol that is at 20 C from Aspen Plus, a value taken from 2011 Humbird report
     return updated_price
 
+def ensure_unit_add_OPEX(system):
+    """
+    Ensure every unit in the system has an '_add_OPEX' attribute.
+    Useful for applying additional costs, for instance catalyst replacement costs for catalytic reactors
+    """
+    for unit in system.units:
+        if not hasattr(unit, '_add_OPEX'):
+            unit._add_OPEX = 0.0
