@@ -1,10 +1,16 @@
 from atj_saf.atj_baseline.systems import atj_system
+from atj_saf.atj_baseline.systems import perform_tea
+
 
 
 def main():
     atj_system.simulate()
     print("System simulation complete.")
     atj_system.show()
+
+    baseline_tea = perform_tea()
+    print(f"\n: {baseline_tea.NPV}")
+
 
 '''
     print("✅ Simulation complete!")
