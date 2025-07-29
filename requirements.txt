@@ -1,8 +1,6 @@
 
 ### `requirements.txt`
-# Package tested on the following dependencies
-
-```txt
+# Package tested on the following dependencies=
 biosteam==2.47.0
 qsdsan==1.4.1
 numba==0.60.0
