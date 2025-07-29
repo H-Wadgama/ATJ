@@ -1,0 +1,11 @@
+
+### `requirements.txt`
+# Package tested on the following dependencies
+
+```txt
+biosteam==2.47.0
+qsdsan==1.4.1
+numba==0.60.0
+llvmlite==0.43.0
+numpy==1.24.4
+scipy==1.11.4

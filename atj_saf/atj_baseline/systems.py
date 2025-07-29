@@ -5,6 +5,7 @@ bst.nbtutorial()
 
 #from atj_saf import atj_baseline
 
+
 def create_atj_system():
     from . import atj_chemicals
     from .atj_chemicals import chemicals
@@ -18,7 +19,7 @@ def create_atj_system():
     from .data.prices import price_data
     from .data.utils import calculate_ethanol_flow, ensure_unit_add_OPEX, ethanol_price_converter
 
-
+    qs.Flowsheet.flowsheet.default
     qs.set_thermo(chemicals) # assigning pure chemical thermo properties to the chemicals
 
     saf_required = 9 # MM gal/yr
@@ -263,7 +264,8 @@ def create_atj_system():
     my_sys.products[1].price = -price_data['wastewater_treatment']
     my_sys.products[2].price = -price_data['wastewater_treatment']
     my_sys.products[3].price = -price_data['wastewater_treatment']
-    saf_stream = my_sys.products[5] 
+    saf_stream = cooler_7.outs[0]
+    saf_stream.ID = 'SAF_product'
 
     
     ensure_unit_add_OPEX(my_sys)
