@@ -1,7 +1,12 @@
-
+# -*- coding: utf-8 -*-
+# BioSTEAM: The Biorefinery Simulation and Techno-Economic Analysis Modules
+# Copyright (C) 2020-2023, Yoel Cortes-Pena <yoelcortes@gmail.com>
+#                          Yalin Li <mailto.yalin.li@gmail.com>
+# 
+# This module is under the UIUC open-source license. See 
+# github.com/BioSTEAMDevelopmentGroup/biosteam/blob/master/LICENSE.txt
+# for license details.
 """
-Abstreact TEA class, very similar to BioSTEAM TEA class but also accounts for 'additional OPEX' which is inherent in QSDSan
-
 """
 from __future__ import annotations
 import pandas as pd
@@ -1020,6 +1025,7 @@ class AbstractTEA:
             
         """
         if isinstance(streams, bst.Stream): streams = [streams]
+        system = self.system
         price2cost = sum([system._price2cost(i) for i in streams])
         if price2cost == 0.: raise ValueError('cannot solve price of empty streams')
         try:
