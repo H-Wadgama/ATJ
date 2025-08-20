@@ -1,24 +1,9 @@
-import math, qsdsan as qs, math
+import qsdsan as qs, biosteam as bst, math
 
-class AdiabaticReactor(qs.SanUnit):
+class OligomerizationReactor(qs.SanUnit):
 
     '''
-    Reactor class for an adiabatic catalytic reaction. 
-    Can be used for one or multiple parallel reactions. 
-
-    Parameters
-    ----------
-    ins :               Inlet stream -> 1 
-    outs :              Outlet stream -> 1 
-    conversion :        defaults to 100% conversion 
-    temperature :       defaults to 280 C 
-    pressure :          defaults to 1 bar (100000 Pa)
-    WHSV :              weighted hourly space velocity (ratio of hourly feed flow to the catalyst weight)
-    aspect_ratio :      length to diameter ratio defaults to 3.0
-    catalyst_density :  defaults to 0.72 kg/L for HZSM-5
-    catalyst_price :    defaults to $100/kg 
-    catalyst_lifetime : defaults to  year
-
+    Reactor for ethanol conversion to ethylene to oligomers
     
     '''
 
@@ -35,18 +20,15 @@ class AdiabaticReactor(qs.SanUnit):
         'Wall thickness': 'in',
         'Vessel Weight': 'lb',
         'Duty': 'kJ/hr'}
-    
-    #_F_BM_default: {'Horizontal pressure vessel': 3.05,
-    #                'Platform and ladders': 1}
-    
 
-    def __init__(self, ID = '', ins = None, outs = (), thermo = None, init_with = 'MultiStream',
-                 uptime_ratio = 0.9, conversion = 1, temperature = 300, pressure = 1e5, WHSV = 1, 
-        aspect_ratio = 3.0, catalyst_density = 0.72, catalyst_price = 100, catalyst_lifetime = 1, *, reaction):
+    def __init__(self, ID = '', ins = None, outs = (), thermo = None, init_with = 'SanStream',
+                 uptime_ratio = 0.9,
+        conversion = 1.0, 
+                 temperature = 393.15, pressure = 3e+6, WHSV = 1.5, 
+        aspect_ratio = 3.0, catalyst_density  = 0.4, catalyst_price = 145.2, catalyst_lifetime = 1):
         
         qs.SanUnit.__init__(self, ID, ins, outs, thermo, init_with)
         self.uptime_ratio = uptime_ratio
-
         self.conversion = conversion
         self.temperature = temperature
         self.pressure = pressure
@@ -55,18 +37,24 @@ class AdiabaticReactor(qs.SanUnit):
         self.catalyst_density = catalyst_density
         self.catalyst_price = catalyst_price
         self.catalyst_lifetime = catalyst_lifetime
-        self.reaction = reaction
+        
 
-    def _run(self): 
-            inf, = self.ins
-            eff, = self.outs
-            eff.mix_from(self.ins)
-            self.reaction.adiabatic_reaction(eff)
+    def _run(self):
+        inf, = self.ins
+        eff, = self.outs
+        x = self.conversion
+        eff.imass['Ethanol'] = (1-x)*inf.imass['Ethanol']
+        # eff.imass['Ethylene'] = x*0.091*inf.imass['Ethanol']
+        eff.imass['Propene'] = x*(0.05 + 0.091 + 0.019)*inf.imass['Ethanol']
+        eff.imass['Butene'] = x*0.67*inf.imass['Ethanol']
+        # eff.imass['Acetaldehyde'] = x*0.019*inf.imass['Ethanol']
+        eff.imass['Pentene'] = x*0.17*inf.imass['Ethanol']
 
-
+        # eff.phase = 'g'
         
     def _design(self):
         D = self.design_results
+        #inf, c2h4 = self.ins
         feed_flow = self.ins[0].F_mass
         catalyst_weight = feed_flow/self.WHSV 
         reactor_volume = (catalyst_weight/self.catalyst_density)*1.15 #15% extra for volume
@@ -134,8 +122,12 @@ class AdiabaticReactor(qs.SanUnit):
         VW = rho_M * ts/12 * (SSA + 2.0 * HSA)  # in lb
         VW = round(VW, 2)
 
-        duty =  self.outs[0].H - self.ins[0].H + self.outs[0].Hf - self.ins[0].Hf    
-
+        # Adding utility
+        self.outs[0].T= self.ins[0].T
+        # duty =  self.outs[0].H - self.ins[0].H + self.outs[0].Hf - self.ins[0].Hf
+        duty =  self.outs[0].H - self.ins[0].H + self.outs[0].Hf - self.ins[0].Hf
+        # duty < 0: raise RuntimeError(f'{repr(self)} is cooling.') # Duty must be greater than 0
+        
         D['Catalyst Weight'] = catalyst_weight
         D['Volume'] = reactor_volume
         D['Vessel Weight'] = VW
@@ -148,18 +140,21 @@ class AdiabaticReactor(qs.SanUnit):
     def _cost(self):
         D = self.design_results
         purchase_costs = self.baseline_purchase_costs
-
+        utility = self.add_heat_utility
+        #self.baseline_purchase_costs.update(purchase_costs)
         
         lnW = math.log(D['Vessel Weight'])
         C_v = 2.0*(math.exp(5.6336 + 0.4599 * lnW + 0.00582 * lnW * lnW))
         C_pl = 2275.*D['Diameter']**0.20294
-        purchase_costs['Horizontal pressure vessel'] = C_v
+        purchase_costs['Horizontal pressure vessel'] = C_v # 2.1 as vessel will be SS312 https://pubs.acs.org/doi/10.1021/i100018a019
         purchase_costs['Platform and ladders'] = C_pl
         purchase_costs['Catalyst'] = self.catalyst_price * D['Catalyst Weight']
-
-        add_OPEX = (D['Catalyst Weight']*self.catalyst_price)/(365*24*self.uptime_ratio*self.catalyst_lifetime) # Additional OPEX accounts for catalyst replacement
-        self._add_OPEX = {'Additional OPEX': add_OPEX}          
-         
+        #utility_cost = 2    # change duty
+        #self.power_utility(utility_cost*D['Duty'])
+        heat_utility = self.add_heat_utility(D['Duty'], self.temperature, heat_transfer_efficiency = 1)
+        add_OPEX = (D['Catalyst Weight']*self.catalyst_price)/(365*24*self.uptime_ratio*self.catalyst_lifetime)
+        self._add_OPEX = {'Additional OPEX': add_OPEX}        
+     
 # getter setter to ensure values of conversion 0 < x < 1
     @property
     def conversion(self):
@@ -171,6 +166,9 @@ class AdiabaticReactor(qs.SanUnit):
             raise AttributeError('`conversion` must be within [0, 1], '
                                     f'the provided value {i} is outside this range.')
         self._conversion = i
+
+
+
 
 
 
@@ -190,7 +188,7 @@ class IsothermalReactor(qs.SanUnit):
         'Vessel Weight': 'lb',
         'Duty': 'kJ/hr'}
 
-    def __init__(self, ID = '', ins = None, outs = (), thermo = None, init_with = 'SanStream',
+    def __init__(self, ID = '', ins = None, outs = (), thermo = None, init_with = 'MultiStream',
                 uptime_ratio = 0.9, conversion = 1.0, temperature = 393.15, pressure = 3e+6, WHSV = 1.5, 
                 aspect_ratio = 3.0, catalyst_density  = 0.4, catalyst_price = 145.2, catalyst_lifetime = 1, *,  reaction):
         
@@ -331,3 +329,125 @@ class IsothermalReactor(qs.SanUnit):
                                     f'the provided value {i} is outside this range.')
         self._conversion = i
     
+
+
+    
+# ******************************************************************
+
+
+# BioSTEAM helpers
+from biosteam.units.design_tools.flash_vessel_design import (
+    compute_vessel_weight_and_wall_thickness,
+    compute_horizontal_vessel_purchase_cost,
+    compute_vertical_vessel_purchase_cost,
+    compute_horizontal_vessel_platform_and_ladders_purchase_cost,
+    compute_vertical_vessel_platform_and_ladders_purchase_cost,
+)
+from biosteam.units.design_tools.specification_factors import (
+    pressure_vessel_material_factors,
+    material_densities_lb_per_ft3,
+)
+
+class TrialReactor(qs.SanUnit):
+    _N_ins = 1
+    _N_outs = 1
+    _units = {'Catalyst Weight':'kg','Volume':'L','Pressure':'psi','Length':'ft',
+              'Diameter':'ft','Wall thickness':'in','Vessel Weight':'lb','Duty':'kJ/hr'}
+
+    def __init__(self, ID='', ins=None, outs=(), thermo=None, init_with='MultiStream',
+                 uptime_ratio=0.9, conversion=1.0, temperature=393.15, pressure=3e6, WHSV=1.5,
+                 aspect_ratio=3.0, catalyst_density=0.4, catalyst_price=145.2, catalyst_lifetime=1,
+                 orientation='horizontal', material='Carbon steel', *, reaction):
+        super().__init__(ID, ins, outs, thermo, init_with)
+        self.uptime_ratio = uptime_ratio
+        self.conversion = conversion
+        self.temperature = temperature
+        self.pressure = pressure
+        self.WHSV = WHSV
+        self.aspect_ratio = aspect_ratio
+        self.catalyst_density = catalyst_density
+        self.catalyst_price = catalyst_price
+        self.catalyst_lifetime = catalyst_lifetime
+        self.orientation = str(orientation).lower()  # 'horizontal'|'vertical'
+        self.material = material  # must match keys in BioSTEAM factor dicts
+        self.reaction = reaction
+
+    def _run(self):
+        inf, = self.ins
+        eff, = self.outs
+        eff.mix_from(self.ins)
+        self.reaction(eff)
+        eff.P = inf.P
+
+    def _design(self):
+        D = self.design_results
+        # Inventory -> volume
+        feed_flow = self.ins[0].F_mass         # kg/h
+        catalyst_weight = feed_flow/self.WHSV  # kg
+        V_L = (catalyst_weight/self.catalyst_density)*1.15  # holdup
+        V_ft3 = V_L*0.0353147
+
+        # Cylinder geometry from AR
+        pi = math.pi
+        D_ft = ((4.0*V_ft3)/(pi*self.aspect_ratio))**(1/3)
+        L_ft = self.aspect_ratio*D_ft
+
+        # Pressure (psia) for BioSTEAM function; user-facing psi in results
+        P_psia = (self.pressure/101325.0)*14.7
+
+        # Material density for weight/thickness; default to carbon steel if missing
+        rho_M = material_densities_lb_per_ft3.get(self.material, material_densities_lb_per_ft3['Carbon steel'])
+
+        # Thickness & weight from BioSTEAM
+        W_lb, t_in = compute_vessel_weight_and_wall_thickness(P=P_psia, D=D_ft, L=L_ft, rho_M=rho_M, Je=0.85)
+
+        # Store
+        self.outs[0].T = self.ins[0].T
+        duty = self.outs[0].H - self.ins[0].H + self.outs[0].Hf - self.ins[0].Hf
+        D['Catalyst Weight'] = catalyst_weight
+        D['Volume'] = V_L
+        D['Vessel Weight'] = round(W_lb, 2)
+        D['Length'] = L_ft
+        D['Diameter'] = D_ft
+        D['Wall thickness'] = t_in
+        D['Duty'] = duty
+        D['Pressure'] = P_psia  # psia, just for reference
+
+    def _cost(self):
+        D = self.design_results
+        purchase_costs = self.baseline_purchase_costs
+
+        # Base vessel cost from orientation-specific helper
+        if self.orientation == 'horizontal':
+            C_v = compute_horizontal_vessel_purchase_cost(W=D['Vessel Weight'])
+            C_pl = compute_horizontal_vessel_platform_and_ladders_purchase_cost(D=D['Diameter'])
+            purchase_costs['Horizontal pressure vessel'] = C_v
+            purchase_costs['Platform and ladders'] = C_pl
+        else:
+            C_v = compute_vertical_vessel_purchase_cost(W=D['Vessel Weight'])
+            C_pl = compute_vertical_vessel_platform_and_ladders_purchase_cost(D=D['Diameter'], L=D['Length'])
+            purchase_costs['Vertical pressure vessel'] = C_v
+            purchase_costs['Platform and ladders'] = C_pl
+
+        # Apply **material factor** to vessel shell only (platform/ladders usually not scaled)
+        mf = pressure_vessel_material_factors.get(self.material, 1.0)
+        for k in list(purchase_costs):
+            if 'pressure vessel' in k.lower():
+                purchase_costs[k] *= mf
+
+        # Catalyst
+        purchase_costs['Catalyst'] = self.catalyst_price * D['Catalyst Weight']
+
+        # Heat utility + OPEX
+        self.add_heat_utility(D['Duty'], self.temperature, heat_transfer_efficiency=1.0)
+        add_OPEX = (D['Catalyst Weight']*self.catalyst_price)/(365*24*self.uptime_ratio*self.catalyst_lifetime)
+        self._add_OPEX = {'Additional OPEX': add_OPEX}
+
+    # simple guardrails
+    @property
+    def conversion(self): return self._conversion
+    @conversion.setter
+    def conversion(self, x):
+        if not 0 <= x <= 1:
+            raise AttributeError('`conversion` must be within [0, 1].')
+        self._conversion = x
