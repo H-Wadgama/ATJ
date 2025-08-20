@@ -6,7 +6,9 @@ chemicals = qs.Chemicals(
     ['Water', 
     'Ethanol', 
     'Ethylene',
+    'Propene',
     'Butene',
+    'Pentene',
     'Hex-1-ene',
     'Oct-1-ene',
     'Dec-1-ene',
@@ -16,7 +18,9 @@ chemicals = qs.Chemicals(
     'Octadec-1-ene',
     'Icos-1-ene',
     'Ethane',
+    'Propane',
     'Butane',
+    'Pentane',
     'Hexane',
     'Octane',
     'Decane',
@@ -25,5 +29,8 @@ chemicals = qs.Chemicals(
     'Hexadecane',
     'Octadecane',
     'Eicosane',
-    'Hydrogen'], cache = True)
+    'Hydrogen',
+    'Butadiene', 
+    'Acetaldehyde', 
+    'Diethylether'], cache = True)
 
