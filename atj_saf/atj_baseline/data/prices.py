@@ -8,3 +8,10 @@ price_data = {
     'oligomerization_catalyst' : 158.4, # USD/kg
     'hydrogenation_catalyst' : 59.12    # USD/kg
 }
+
+
+'''
+References for prices in supplementary information of article
+add link
+
+'''
