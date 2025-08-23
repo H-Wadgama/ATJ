@@ -9,10 +9,10 @@ from biosteam.units.design_tools import (
  
 '''
 __all__ = (
-    'RCFReactor', 'RCF', 'ReductiveCatalyticFractionation'
+    'SolvolysisReactor', 'Solvolysis', 'RCF-1'
 )
 '''
-class RCFReactor(bst.Unit, bst.units.design_tools.PressureVessel):
+class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
 
 
 
@@ -155,7 +155,7 @@ class RCFReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         biomass, solvent = self.ins
         used_biomass, used_solvent = self.outs
         used_solvent.copy_like(solvent) 
-        used_solvent.imass['l', 'Methanol'] = used_solvent.imass['l', 'Methanol']*(1-self.methanol_decomposition) # 0.5% methanol lost due to decomposition
+        used_solvent.imass['Methanol'] = used_solvent.imass['Methanol']*(1-self.methanol_decomposition) # 0.5% methanol lost due to decomposition
         used_biomass.copy_like(biomass)
         used_solvent.P = self.P
         used_solvent.T = self.T
@@ -164,7 +164,7 @@ class RCFReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         
 
         solubilized_lignin = used_biomass.imass['SolubleLignin'] 
-        used_solvent.imass['l', 'SolubleLignin'] += solubilized_lignin # Soluble lignin part of solvent stream 
+        used_solvent.imass['SolubleLignin'] += solubilized_lignin # Soluble lignin part of solvent stream 
         used_biomass.imass['l', 'SolubleLignin'] = 0 # No soluble lignin in biomass
         
 

@@ -3,7 +3,7 @@ import math
 
 
 
-class SolvolysisReactor(bst.Unit):
+class bleh(bst.Unit):
     
     
     _N_ins = 1
@@ -163,8 +163,8 @@ class SolvolysisReactor(bst.Unit):
     
 
 
-class RCFReactor(bst.Unit, bst.units.design_tools.PressureVessel, isabstract = True):
-    pass
+
+    
 
 
 
