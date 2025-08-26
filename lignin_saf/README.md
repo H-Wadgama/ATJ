@@ -4,6 +4,18 @@ This is a BioSTEAM model for lignin valorization to SAF currently under developm
 
 The baseline model assumes a poplar feedstock (2000 dry metric ton per day) and methanol water as a solvent for RCF. The choice of biomass and solvent primarily due to the availability of literature data
 
+The proposed process areas are*:
+Area 100: Feed storage and handling 
+Area 200: RCF 
+Area 300: Products recovery
+Area 400: Wastewater treatment
+Area 500: Combuster, boiler and turbogenerator
+Area 600: Product and feed chemical storage
+Area 700: Utilities
+
+*Current design includes Area 200 and Area 300 only
+
+
 The main process assumptions:
 _The loss of carbohydrate retention in biomass pulp post RCF is due to solvent dissolution_: Carbohydrate retention can decrease due to solvent dissolution or  reaction within the solvent [1](https://pubs.rsc.org/en/content/articlelanding/2021/ee/d0ee02870c). Here we assume that the carbohydrates are only solubilized and are not reacting with the solvent. 
 

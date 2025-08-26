@@ -1,0 +1,11 @@
+Document where I mention any parameters that seem highly uncertain
+
+The solvent decomposition/lost as carbonaceous gases seems quite uncertain because the baseline value I
+am using is for a batch reactor. Moreover, the biomass type is birchwood rather than poplar and hydrogen 
+is at 3MPa rather than the 6MPa I have assumed in my baseline.
+
+The percentage retention of cellulose and xylan are uncertain
+
+The void fraction of the poplar bed is uncertain at this point.
+Need to clarify whether a higher or a lower void fraction is needed to 
+minimize P drop. 
