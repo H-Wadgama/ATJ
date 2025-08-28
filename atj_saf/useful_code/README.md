@@ -77,3 +77,102 @@ hydrogenolysis = bst.ParallelReaction([
     bst.Reaction('SolubleLignin,l -> G_Oligomer,l', reactant= 'SolubleLignin', phases = 'slg',X = 0.125, basis = 'wt', correct_atomic_balance=False),
 ])
 ```
+
+# Tip 2: Define critical temperature and critical pressure of pseudocomponents only if you are sure about the models used for their temperature dependent properties like  heat capacity etc
+
+I was trying to define lignin monomers for the RCF process, and defined one component as:
+
+```bash
+propylguaiacol = tmo.Chemical(  # S-Lignin Monomer 
+        'Propylguaiacol',
+        default = True,      # Defaults all other properties 
+        search_db=False,     # Since not present in database, do not search
+        formula='C10H14O2',  # Chemical formulae
+        phase='l',           # phase at rtp
+        omega = 0.6411,      # accentric factor
+        Tb = 541.7,          # [K]  normal boiling point
+        Tc = 749,            # [K]  critical temperature
+        Pc = 2.9e6,          # [Pa] critical pressure
+        Hvap = 7.78e4,       # [J/mol] enthalpy of vaporization at 298 K
+        rho = 1056.3,        # [kg/m3] density at rtp
+
+    )
+    propylguaiacol.synonyms = ('4-Propylguaiacol',) # Synonyms that can be used to refer to it
+```
+
+I found these values using Aspen NIST TDE, and naturally thought of adding all the values I could find from there. I did not add the models for the temperature dependent properties like density, heat capacity etc.
+
+I created a stream that was simply heated to a required temperature. The stream consisted of propylguaiacol and methanol:
+
+```bash
+stream = bst.MultiStream(l = [('Propylguaiacol', 100), ('Methanol', 1000)], phases = ('l', 'g'))
+heat_1 = bst.units.HXutility(ins = stream, T = 800, rigorous = True)
+heat_1.simulate()
+```
+I ran into the following error:
+
+```
+---------------------------------------------------------------------------
+RuntimeError                              Traceback (most recent call last)
+File c:\Users\hwadg\anaconda3\envs\pyfuel\lib\site-packages\thermo\utils\t_dependent_property.py:4270, in TDependentProperty.T_dependent_property_integral(self, T1, T2)
+   4269 if T1 <= Tmax:
+-> 4270     integral += self.extrapolate_integral(Tmax, T2, method)
+   4271 else:
+
+File c:\Users\hwadg\anaconda3\envs\pyfuel\lib\site-packages\thermo\utils\t_dependent_property.py:4806, in TDependentProperty.extrapolate_integral(self, T1, T2, method, in_range)
+   4805 else:
+-> 4806     extrapolation_coeffs[key] = coeffs = self._get_extrapolation_coeffs(*key)
+   4807 v, d = coeffs
+
+File c:\Users\hwadg\anaconda3\envs\pyfuel\lib\site-packages\thermo\utils\t_dependent_property.py:4472, in TDependentProperty._get_extrapolation_coeffs(self, extrapolation, method, low)
+   4471 if extrapolation == 'linear':
+-> 4472     v = self.calculate(T, method=method)
+   4473     d = self.calculate_derivative(T, method)
+
+File c:\Users\hwadg\anaconda3\envs\pyfuel\lib\site-packages\thermo\heat_capacity.py:1026, in HeatCapacityLiquid.calculate(self, T, method)
+   1025 elif method == ROWLINSON_POLING:
+-> 1026     Cpgm = self.Cpgm(T) if hasattr(self.Cpgm, '__call__') else self.Cpgm
+   1027     return Rowlinson_Poling(T, self.Tc, self.omega, Cpgm)
+
+File c:\Users\hwadg\anaconda3\envs\pyfuel\lib\site-packages\thermo\utils\t_dependent_property.py:3091, in TDependentProperty.T_dependent_property(self, T)
+   3090     if self.RAISE_PROPERTY_CALCULATION_ERROR:
+-> 3091         raise RuntimeError(f"No {self.name.lower()} method selected for component with CASRN '{self.CASRN}'")
+...
+   4279         )
+   4280     else:
+   4281         return None
+
+RuntimeError: Failed to extrapolate integral of liquid heat capacity method 'ROWLINSON_POLING' between T=748.9 to 800.0 K for component with CASRN 'None'
+```
+When I searched for the heat capacity models my new defined propylguaiacol was using I figured:
+
+```bash
+chems['Propylguaiacol'].Cn
+```
+```
+HeatCapacityLiquid(MW=166.21696, Tc=749, omega=0.6411, Cpgm=HeatCapacityGas(MW=166.21696, extrapolation="linear", method=None), extrapolation="linear", method="ROWLINSON_POLING", Tmin=224.7, Tmax=748.9)
+```
+
+This meant that for the liquid phase heat capacity, propylguaiacol was using the Rowlinson Poling method which scales heat capacity according to the critical temperature and pressure and the accentric factor. However, I am not sure about this method and its applicability for this kind of component, and so its best if I don't use it to try predict properties. Moreover, I know that it is a non-volatile specie and will likely not evaporate across the system and so it makes more sense to use a common Cp value.
+
+The way biosteam uses Cp for pseudo components of biomass is assign it with a value of 1.36 J/g/K and so for Cellulose at 500 K, the Cp can be determined from:
+
+```bash
+chems['Cellulose'].Cn(500)
+```
+```
+221.15977840000002
+```
+Even if I change the temperature I still get the same value, because the function is essentially just a straight line. 
+I can check this by:
+```bash
+chems['Cellulose'].Cn
+```
+```
+HeatCapacityLiquid(MW=162.1406, Cpgm=HeatCapacityGas(MW=162.1406, extrapolation="linear", method=None), extrapolation="linear", method="USER_METHOD", Tmin=0.0, Tmax=inf)
+```
+Where heat capacity is just a straight line without any slope from T = 0 to T = inf.
+
+And the reason for this is that Cellulose does not have its Tc and Pc temperatures so BioSTEAM does not try defaulting it to Rowlinson Polani and just gives it this linear default method.
+
+Therefore for my pseudocomponent lignin monomer propylguaiacol, I am going to remove Tc and Pc. It was good to determine them from Aspen Plus TDE, because I know they are non volatiles now, and then I can just force BioSTEAM to default it to a user defined linear method where the heat capacity will be the components MW * 1.36. Since the model is constant infinitely, it assumes that the components always stay in the liquid phase (otherwise it would have a valid range of operation until the normal boilig point or something)
