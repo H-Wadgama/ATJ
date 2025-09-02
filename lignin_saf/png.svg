@@ -1,0 +1,76 @@
+<ns0:svg xmlns:ns0="http://www.w3.org/2000/svg" xmlns:ns1="http://www.w3.org/1999/xlink" width="324pt" height="143pt" viewBox="0.00 0.00 324.00 143.00">
+<ns0:g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 138.7)">
+
+<ns0:g id="edge1" class="edge">
+<ns0:title>87295735004:n-&gt;87295712896:w</ns0:title>
+<ns0:path fill="none" stroke="#90918e" stroke-width="1.6" d="M231.25,-107.95C231.25,-141.21 272.81,-106.35 306.07,-106.35" />
+<ns0:g id="a_edge1-label"><ns0:a ns1:title="Temperature: 250 K&#10;Pressure: 1e+06 Pa&#10;Gas flow: 705 kmol/hr">
+<ns0:text xml:space="preserve" text-anchor="middle" x="280.25" y="-118.94" font-family="Arial" font-size="14.00" fill="#90918e"> s105</ns0:text>
+</ns0:a>
+</ns0:g>
+</ns0:g>
+
+<ns0:g id="edge4" class="edge">
+<ns0:title>87295735004:s-&gt;87295712908:w</ns0:title>
+<ns0:path fill="none" stroke="#90918e" d="M231.25,-26.75C231.25,6.51 272.81,-28.35 306.07,-28.35" />
+<ns0:g id="a_edge4-label"><ns0:a ns1:title="Temperature: 250 K&#10;Pressure: 1e+06 Pa&#10;Liquid flow: 64.5 kmol/hr">
+<ns0:text xml:space="preserve" text-anchor="middle" x="280.25" y="-29.86" font-family="Arial" font-size="14.00" fill="#90918e"> s106</ns0:text>
+</ns0:a>
+</ns0:g>
+</ns0:g>
+
+<ns0:g id="edge3" class="edge">
+<ns0:title>87295697818:c-&gt;87295735004:c</ns0:title>
+<ns0:path fill="none" stroke="#90918e" stroke-width="2.2" d="M187.25,-67.35C189.27,-67.35 191.27,-67.35 193.24,-67.35" />
+<ns0:polygon fill="#90918e" stroke="#90918e" stroke-width="2.2" points="193.15,-70.85 203.15,-67.35 193.15,-63.85 193.15,-70.85" />
+<ns0:g id="a_edge3-label"><ns0:a ns1:title="Temperature: 250 K&#10;Pressure: 1e+06 Pa&#10;Gas flow: 705 kmol/hr&#10;Liquid flow: 64.5 kmol/hr">
+<ns0:text xml:space="preserve" text-anchor="middle" x="196.88" y="-69.8" font-family="Arial" font-size="14.00" fill="#90918e"> </ns0:text>
+</ns0:a>
+</ns0:g>
+</ns0:g>
+
+<ns0:g id="edge2" class="edge">
+<ns0:title>87295712704:e-&gt;87295697818:c</ns0:title>
+<ns0:path fill="none" stroke="#90918e" stroke-width="2.2" d="M10.8,-67.35C24.09,-67.35 38.31,-67.35 51.91,-67.35" />
+<ns0:g id="a_edge2-label"><ns0:a ns1:title="Temperature: 320 K&#10;Pressure: 500000 Pa&#10;Gas flow: 770 kmol/hr">
+<ns0:text xml:space="preserve" text-anchor="middle" x="31.55" y="-69.8" font-family="Arial" font-size="14.00" fill="#90918e"> s53</ns0:text>
+</ns0:a>
+</ns0:g>
+</ns0:g>
+
+<ns0:g id="node1" class="node">
+<ns0:title>87295735004</ns0:title>
+<ns0:g id="a_node1"><ns0:a ns1:title="Cooling duty: -4.15e+03 MJ/hr&#10;Utility cost: 54.6 USD/hr&#10;Purchase cost: 37,729 USD&#10;Installed equipment cost: 125,138 USD">
+<ns0:polygon fill="#555f69" stroke="#90918e" points="255.75,-106.95 206.75,-106.95 206.75,-27.75 255.75,-27.75 255.75,-106.95" />
+<ns0:text xml:space="preserve" text-anchor="middle" x="231.25" y="-69.8" font-family="Arial" font-size="14.00" fill="white">F19</ns0:text>
+<ns0:text xml:space="preserve" text-anchor="middle" x="231.25" y="-54.05" font-family="Arial" font-size="14.00" fill="white">Flash</ns0:text>
+</ns0:a>
+</ns0:g>
+</ns0:g>
+
+<ns0:g id="node2" class="node">
+<ns0:title>87295697818</ns0:title>
+<ns0:g id="a_node2"><ns0:a ns1:title="Cooling duty: -4.15e+03 MJ/hr&#10;Utility cost: 54.6 USD/hr&#10;Purchase cost: 21,299 USD&#10;Installed equipment cost: 67,852 USD">
+<ns0:ellipse fill="#60c1cf" stroke="none" cx="119.65" cy="-67.35" rx="67.35" ry="67.35" />
+<ns0:text xml:space="preserve" text-anchor="middle" x="119.65" y="-69.8" font-family="Arial" font-size="14.00" fill="white">F19</ns0:text>
+<ns0:text xml:space="preserve" text-anchor="middle" x="119.65" y="-54.05" font-family="Arial" font-size="14.00" fill="white">Heat exchanger</ns0:text>
+</ns0:a>
+</ns0:g>
+</ns0:g>
+
+<ns0:g id="node3" class="node">
+<ns0:title>87295712896</ns0:title>
+<ns0:polygon fill="#f98f60" stroke="#90918e" points="315.55,-106.35 307.45,-113.55 307.45,-99.15 315.55,-106.35" />
+</ns0:g>
+
+<ns0:g id="node4" class="node">
+<ns0:title>87295712704</ns0:title>
+<ns0:polygon fill="#f98f60" stroke="#90918e" points="5.4,-72.75 0,-67.35 5.4,-61.95 10.8,-67.35 5.4,-72.75" />
+</ns0:g>
+
+<ns0:g id="node5" class="node">
+<ns0:title>87295712908</ns0:title>
+<ns0:polygon fill="#f98f60" stroke="#90918e" points="315.55,-28.35 307.45,-35.55 307.45,-21.15 315.55,-28.35" />
+</ns0:g>
+</ns0:g>
+</ns0:svg>
