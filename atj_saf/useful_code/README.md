@@ -176,3 +176,45 @@ Where heat capacity is just a straight line without any slope from T = 0 to T = 
 And the reason for this is that Cellulose does not have its Tc and Pc temperatures so BioSTEAM does not try defaulting it to Rowlinson Polani and just gives it this linear default method.
 
 Therefore for my pseudocomponent lignin monomer propylguaiacol, I am going to remove Tc and Pc. It was good to determine them from Aspen Plus TDE, because I know they are non volatiles now, and then I can just force BioSTEAM to default it to a user defined linear method where the heat capacity will be the components MW * 1.36. Since the model is constant infinitely, it assumes that the components always stay in the liquid phase (otherwise it would have a valid range of operation until the normal boilig point or something)
+
+
+# Tip 3: Remember that some unit operations do require one argument to simulate, and others don't
+
+For instance a good ole pump on BioSTEAM can simply be simulated by:
+```bash
+ole_pump = bst.units.Pump('Ole_Pump')
+ole_pump.simulate()
+```
+
+This pump really won't do anything (you haven't specified the inlets or the outlet pressure required), but the code still works.
+
+However, if I try to simulate a valve:
+
+```bash
+ole_valve = bst.units.IsenthalpicValve('Ole_Valve')
+ole_valve.simulate()
+```
+I get an error:
+
+```
+---------------------------------------------------------------------------
+TypeError                                 Traceback (most recent call last)
+Cell In[239], line 1
+----> 1 ole_valve = bst.units.IsenthalpicValve('Ole_Valve')
+      2 ole_valve.simulate()
+
+File c:\Users\hwadg\anaconda3\envs\pyfuel\lib\site-packages\biosteam\_unit.py:611, in Unit.__init__(self, ID, ins, outs, thermo, **kwargs)
+    607 self._utility_cost = None
+    609 self._recycle_system = None
+--> 611 super().__init__(ID, ins, outs, thermo, **kwargs)
+    613 self._assert_compatible_property_package()
+
+File c:\Users\hwadg\anaconda3\envs\pyfuel\lib\site-packages\thermosteam\network.py:1052, in AbstractUnit.__init__(self, ID, ins, outs, thermo, **kwargs)
+   1049 #: Auxiliary unit operation names.
+   1050 self.auxiliary_unit_names = list(self.auxiliary_unit_names)
+-> 1052 self._init(**kwargs)
+
+TypeError: IsenthalpicValve._init() missing 1 required positional argument: 'P'
+```
+
+This is just strange on BioSTEAMs part. Seems to not interfere terribly with daily bst operations so its fine I suppose
