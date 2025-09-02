@@ -218,3 +218,89 @@ TypeError: IsenthalpicValve._init() missing 1 required positional argument: 'P'
 ```
 
 This is just strange on BioSTEAMs part. Seems to not interfere terribly with daily bst operations so its fine I suppose
+
+# Tip 4: Setting up auxiliaries can be tricky, so here's a short kind of guide to help you avoid errors down the line
+
+Auxiliaries can be handy because they can do associated unit operations for instance inlet compressing/heating, outlet splitting, etc within your unit operation. The reason I feel this helps rather than having these units as separate global units as you would otherwise do, is that they can allow the user to place better estimates on the CAPEX and OPEX of the complete operation, and also because it allows the user to place conditions within these different units, making it a more dynamic system. For example if one has a PSA unit, an auxiliary would be a feed compressor that increases the pressure to the feed pressure. If this is a separate global unit, it will make its own separate estimates outside of your PSA class. Moreover, if I want this pump to only function if the incoming pressure is less than the feed pressure, I can do that through an if statement within my PSA class. These sort of functionalities make auxiliary units quite an integral part of BioSTEAM.
+The problem with auxiliaries (or atleast what I face typically) is wiring issues - you connect a parent stream to the auxiliary, or the auxiliary stream to the parent and things get a bit messy. I've addressed some common pain points I experienced when designing a class for Pressure Swing Adsorption of Hydrogen.
+
+## Tip 4.1. For auxiliaries that function on the incoming stream, do the following to prevent errors!
+Define them in the  `_init` class and make sure that their `ins` are set to `self.ins[0]`(or whatever index the inlet stream you want to attach it to)
+```bash
+        self.feed_pump = self.auxiliary('feed_pump', bst.IsentropicCompressor, ins=self.ins[0], P = self.P_feed)
+```
+Next, define the logic you want in `_run`. In my case, I want this pump to compress the inlet, but only if the incoming pressure is less than the feed PSA pressure. Otherwise, I don't want to simulate a pump.
+
+``` bash
+ def _run(self):
+        if self.ins[0].P < self.P_feed:    # Setting the condition, if inlet P is less than PSA P
+            self.feed_pump.P = self.P_feed # The outlet pressure of pump equals PSA P
+            self.feed_pump.simulate()      # The pump is simulated
+        else:
+            self.feed_pump.outs[0].copy_like(self.ins[0])  # The pump does nothing and outlet is the same as its inlet
+```
+Now because the feed is compressed, the systems self.ins[0] automatically becomes the outlet of the pump:
+```bash
+        feed, = self.feed_pump.outs[0]
+```
+This way, whatever stream is coming in the system, it will be checked for its pressure and if its pressure is less than PSA pressure, the pump will do its job.
+
+Note that even though I just set the pump functionalities in `_init()` and `_run()` it still does the design and the costing for it. This is not an issue, and BioSTEAM's smart enough to deduce these things.
+
+ 
+## Tip 4.2. For setting up auxiliaries at the outlet, do this!
+Setting up auxiliaries for the outlets can be a bit more involved. Here for the same PSA class, i introduce a vaccuum pump. The vaccuum pump essentially increases the pressure of the purge to atmospheric pressure, but only if the pressure of the purge was lower than atmospheric to begin with. This is how it will be done.
+
+Inside `_init()`, I define a temporary stream that will be my pseudo-outlet:
+```bash
+self._raw_extract = bst.Stream()
+```
+and then for my vaccuum pump:
+```bash
+self.vaccuum_pump = self.auxiliary('vaccuum_pump', bst.IsentropicCompressor, ins = self._raw_extract, outs = self.outs[1], P = 101325)  # Outs are what I want the system outs to be, the self._raw_extract is a temporary stream
+```
+The `self._raw_extract` is an internally created stream only to alter its composition and properties to make it mimic the actual system outlet.
+
+Then inside `_run`, I define the properties of this stream:
+
+```bash
+        self._raw_extract.copy_like(feed)
+        self._raw_extract.imol['Hydrogen'] = feed.imol['Hydrogen'] - raffinate.imol['Hydrogen']
+        self._raw_extract.phase = 'g'
+        self._raw_extract.T = self.ins[0].T
+        self._raw_extract.P = self.P_purge
+```
+Now `P_purge` here is 0.25e5, and I want to increase the pressure to atmospheric. For that I define logic for my vaccuum pump.
+
+```bash
+
+        if self.P_purge < 101325:           # If Purge pressure is less than atmospheric
+            self.vaccuum_pump.P = 101326    # Set vaccuum pump pressure to atmospheric
+            self.vaccuum_pump.simulate()    # Simulate the pump
+
+        else:
+            self.vaccuum_pump.outs[0].copy_like(self._raw_extract) # Otherwise, the outlet is just the _raw_extract stream without any pumping
+```
+Note that since we already defined the pump outlet as `self.outs[1]`, in the `else` statement above, we are kind of just making the PSA `outs[1]` stream equals to `self._raw_extract`
+
+This is it! 
+
+## Tip 4.3. If you want a custom number of the auxiliary units, do this!
+Typically the way auxiliaries are set is that they equal the number of parallel units you decide on. For instance, if I have 12 beds for my adsorption column, I use the `self.parallel` feature in my `_design()` class:
+
+```bash
+self.parallel['self'] = self.N_beds  # 'self' argument here refers to the parent class
+
+```
+
+Since `self.N_beds`equals 12 here, I basically create 12 of the units, so for an adsorption column, I create 12 of these vessels. The utilities also scale accordingly.
+
+However, for my PSA system, I just want 1 feed pump and 1 vaccuum pump. To make sure this is the case, after defining parallel units, I also define:
+
+```bash
+self.parallel['feed_pump']   = 1   
+self.parallel['vaccuum_pump']   = 1  
+```
+
+This ensures that I only have 1 feed, and vaccuum pump simulating. 
+Note that if I check my design results, I might still see vaccuum pump and feed pump x 12, but if you really see the diagram of the unit operation, or try removing the `self.parallel['feed_pump'] = 1`, you will see that the costing indeed scales up to x12 indicating that indeed you can define the number of auxiliaires with the code above.   
