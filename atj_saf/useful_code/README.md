@@ -227,21 +227,21 @@ The problem with auxiliaries (or atleast what I face typically) is wiring issues
 ## Tip 4.1. For auxiliaries that function on the incoming stream, do the following to prevent errors!
 Define them in the  `_init` class and make sure that their `ins` are set to `self.ins[0]`(or whatever index the inlet stream you want to attach it to)
 ```bash
-        self.feed_pump = self.auxiliary('feed_pump', bst.IsentropicCompressor, ins=self.ins[0], P = self.P_feed)
+self.feed_pump = self.auxiliary('feed_pump', bst.IsentropicCompressor, ins=self.ins[0], P = self.P_feed)
 ```
 Next, define the logic you want in `_run`. In my case, I want this pump to compress the inlet, but only if the incoming pressure is less than the feed PSA pressure. Otherwise, I don't want to simulate a pump.
 
 ``` bash
- def _run(self):
-        if self.ins[0].P < self.P_feed:    # Setting the condition, if inlet P is less than PSA P
-            self.feed_pump.P = self.P_feed # The outlet pressure of pump equals PSA P
-            self.feed_pump.simulate()      # The pump is simulated
-        else:
-            self.feed_pump.outs[0].copy_like(self.ins[0])  # The pump does nothing and outlet is the same as its inlet
+def _run(self):
+   if self.ins[0].P < self.P_feed:    # Setting the condition, if inlet P is less than PSA P
+      self.feed_pump.P = self.P_feed # The outlet pressure of pump equals PSA P
+      self.feed_pump.simulate()      # The pump is simulated
+   else:
+      self.feed_pump.outs[0].copy_like(self.ins[0])  # The pump does nothing and outlet is the same as its inlet
 ```
 Now because the feed is compressed, the systems self.ins[0] automatically becomes the outlet of the pump:
 ```bash
-        feed, = self.feed_pump.outs[0]
+feed, = self.feed_pump.outs[0]
 ```
 This way, whatever stream is coming in the system, it will be checked for its pressure and if its pressure is less than PSA pressure, the pump will do its job.
 
@@ -264,22 +264,21 @@ The `self._raw_extract` is an internally created stream only to alter its compos
 Then inside `_run`, I define the properties of this stream:
 
 ```bash
-        self._raw_extract.copy_like(feed)
-        self._raw_extract.imol['Hydrogen'] = feed.imol['Hydrogen'] - raffinate.imol['Hydrogen']
-        self._raw_extract.phase = 'g'
-        self._raw_extract.T = self.ins[0].T
-        self._raw_extract.P = self.P_purge
+self._raw_extract.copy_like(feed)
+self._raw_extract.imol['Hydrogen'] = feed.imol['Hydrogen'] - raffinate.imol['Hydrogen']
+self._raw_extract.phase = 'g'
+self._raw_extract.T = self.ins[0].T
+self._raw_extract.P = self.P_purge
 ```
 Now `P_purge` here is 0.25e5, and I want to increase the pressure to atmospheric. For that I define logic for my vaccuum pump.
 
 ```bash
+if self.P_purge < 101325:           # If Purge pressure is less than atmospheric
+   self.vaccuum_pump.P = 101326    # Set vaccuum pump pressure to atmospheric
+   self.vaccuum_pump.simulate()    # Simulate the pump
 
-        if self.P_purge < 101325:           # If Purge pressure is less than atmospheric
-            self.vaccuum_pump.P = 101326    # Set vaccuum pump pressure to atmospheric
-            self.vaccuum_pump.simulate()    # Simulate the pump
-
-        else:
-            self.vaccuum_pump.outs[0].copy_like(self._raw_extract) # Otherwise, the outlet is just the _raw_extract stream without any pumping
+else:
+   self.vaccuum_pump.outs[0].copy_like(self._raw_extract) # Otherwise, the outlet is just the _raw_extract stream without any pumping
 ```
 Note that since we already defined the pump outlet as `self.outs[1]`, in the `else` statement above, we are kind of just making the PSA `outs[1]` stream equals to `self._raw_extract`
 
