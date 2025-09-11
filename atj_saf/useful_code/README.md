@@ -303,3 +303,29 @@ self.parallel['vaccuum_pump']   = 1
 
 This ensures that I only have 1 feed, and vaccuum pump simulating. 
 Note that if I check my design results, I might still see vaccuum pump and feed pump x 12, but if you really see the diagram of the unit operation, or try removing the `self.parallel['feed_pump'] = 1`, you will see that the costing indeed scales up to x12 indicating that indeed you can define the number of auxiliaires with the code above.   
+
+## Tip 5. If you want to display output graphviz diagrams, make sure you use this one argument
+
+Obviously, any kind of graphviz file runs on the condition that graphviz is installed in your system. What I didn't realize was that using this one line of code really makes a difference
+```bash
+bst.nbtutorial()
+```
+Once this is set, every graphviz output file you create, you can hower over the unit operations to identify what their duties are, what the purchase costs are and what their utility requirements are. Similar thing for streams where temperature, pressures and flows are easily avaialble.
+
+This makes a ton of difference whenever designing a project. Rather than using 
+```bash
+unit_op.results()
+```
+and also
+```bash
+unit_op
+```
+to separately display stream information and design results, `bst.nbtutorial()` makes evaluating your flowsheet a lot easier.
+
+Otherwise, if graphviz is installed but this argument is set to false, be prepared to see a lot of numbers for every svg
+
+```
+120334934134:c->120334851048:w Carbohydrate Pulp 120334934134:c->120341758448:w Solvolysis Liquor 120334934221:c->120334934134:c 120334425476:e->120334934134:c Poplar In 120341758460:e->120334934221:c s4 120334934134 RCF103-S Solvolysis reactor 120334934221 RCF103-S Pump 1 120334425476 120334851048 120341758460 120341758448
+```
+This is what a typical diagram looked like for me before the magical `bst.nbtutorial()`
+
