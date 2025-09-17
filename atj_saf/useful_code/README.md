@@ -329,3 +329,193 @@ Otherwise, if graphviz is installed but this argument is set to false, be prepar
 ```
 This is what a typical diagram looked like for me before the magical `bst.nbtutorial()`
 
+# Integrating two systems can be a bit tricky, so make sure you follow these steps
+Lately, I was trying to connect the RCF system I've built with the cellulosic ethanol system native to BioSTEAM. For context, the carbohydrate pulp from the RCF reactor is the feed to the ethanol system, so what I tried was simulating the RCF system, setting the ins of the ethanol system as the carbohydrate pulp from the RCF, and then simulating the ethanol system, and finally creating an integrated system which kind of just simulated the two. Sounds good right? But the problem was that BioSTEAM created two of the facilities, so I had a boiler turbogenerator from my RCF system, and then a seperate one from my cellulosic system. Similar situation for the wastewater treatment. Considering that, especially the boiler turbogenerator has a very high CAPEX, I would want to have one central BT for my system. Thats when things got a bit tricky.
+I tried using the following BioSTEAM commands:
+
+```bash
+integrated_sys.units[74].disconnect(inlets =integrated_sys.units[74].ins[0])    
+integrated_sys.units[74].simulate()
+```
+and also 
+```bash
+integrated_sys.units[74].ins.remove(integrated_sys.units[74].ins[0])
+integrated_sys.units[74].simulate()
+```
+The problem with either was that even when I use `disconnect` or `remove`, when I resimulated my system, my changes were essentially undone. For some reason, these changes were not permenant. 
+
+The solution that exists is to first remove the faciliites from one of your systems. So because I had more control over my RCF system (since I defined all the unit operations myself), I went ahead and deleted the BT and WWT systems.
+Then I simulated that system, followed by creating the cellulosic ethanol system, and gave it my rcf_system pulp as feed
+```bash
+ethanol = cellulosic.create_cellulosic_ethanol_system(ins = rcf_system.products[0])
+ethanol.simulate()          
+```
+So essentially I simulated both systems, but didn't integrate them yet. Next what I do is that I scan through all the unit operations in my etoh_system using the following code:
+```bash
+for i,unit in enumerate(etoh_system.units):
+    print(i, unit.ID)
+```
+Which yields:
+```
+0 U101
+1 H2SO4_storage
+2 T201
+3 M201
+.
+.
+.
+55 P702
+56 M701
+57 T703
+58 M3
+59 P403
+60 M4
+61 CWP
+62 ADP
+63 CT
+64 FWT
+65 CIP
+66 BT
+67 PWC
+```
+This helps me because it gives me all the relevant IDs for the unit operations in ethanol system. I need to know these because I didn't make the system myself, and BioSTEAM makes it kind of hard to access these unit ops otherwise
+Since the BT has an ID of 66, I go ahead and access it:
+```bash
+etoh_system.units[66]
+```
+```
+BoilerTurbogenerator: BT
+ins...
+[0] to_boiler  from  Mixer-M2
+    phase: 'l', T: 313.12 K, P: 101325 Pa
+    flow (kmol/hr): Water              997
+                    Ethanol            0.00281
+                    AceticAcid         0.785
+                    Furfural           0.115
+                    Glycerol           0.0702
+                    LacticAcid         0.692
+                    SuccinicAcid       0.137
+                    DAP                0.0618
+                    AmmoniumSulfate    1.03
+                    HMF                0.0876
+                    SO2                0.000241
+                    Glucose            0.107
+                    Xylose             0.272
+                    Arabinose          0.482
+                    Extract            2.58
+                    Ash                4.13e+03
+                    NaOH               0.786
+                    Lignin             82.5
+                    SolubleLignin      0.164
+                    GlucoseOligomer    0.267
+                    GalactoseOligomer  0.000677
+                    MannoseOligomer    0.000354
+                    XyloseOligomer     0.113
+                    ArabinoseOligomer  0.0138
+                    Z_mobilis          32.5
+                    Protein            126
+                    Glucan             7.78
+                    Xylan              3.22
+                    Xylitol            0.192
+                    Cellobiose         0.0355
+                    Arabinan           1.08
+                    Mannan             3.1
+                    Galactan           0.725
+                    WWTsludge          43.8
+                    Cellulase          0.994
+[1] gas_to_boiler  from  Mixer-M3
+    phase: 'g', T: 307.65 K, P: 101325 Pa
+    flow (kmol/hr): Water         37.1
+                    Ethanol       0.000147
+                    AceticAcid    0.00877
+                    Furfural      0.00849
+                    Glycerol      4.27e-08
+                    LacticAcid    2.52e-06
+                    SuccinicAcid  6.7e-09
+                    CH4           351
+                    CO2           337
+[2] makeup_water  
+    phase: 'l', T: 298.15 K, P: 101325 Pa
+    flow (kmol/hr): Water  427
+[3] natural_gas  
+    phase: 'g', T: 288.71 K, P: 101560 Pa
+    flow: 0
+[4] FGD_lime  
+    phase: 'l', T: 298.15 K, P: 101325 Pa
+    flow (kmol/hr): Water  9.94
+                    Lime   2.49
+[5] boiler_chemicals  
+    phase: 'l', T: 298.15 K, P: 101325 Pa
+    flow (kmol/hr): Ash  0.496
+[6] air  
+    phase: 'g', T: 298.15 K, P: 101325 Pa
+    flow (kmol/hr): N2  3.6e+04
+                    O2  8.37e+03
+outs...
+[0] emissions  
+    phase: 'g', T: 397.77 K, P: 101325 Pa
+    flow (kmol/hr): Water  2.27e+03
+                    P4O10  0.0154
+                    N2     3.6e+04
+                    O2     6.59e+03
+                    SO2    0.166
+                    CO2    1.67e+03
+[1] blowdown  
+    phase: 'l', T: 298.15 K, P: 101325 Pa
+    flow (kmol/hr): Water  427
+[2] ash  
+    phase: 'l', T: 298.15 K, P: 101325 Pa
+    flow (kmol/hr): Water  73.5
+                    CaSO4  1.91
+                    Ash    4.15e+03
+```
+
+The `gas_to_boiler` is of my interest, since I want to send the PSA waste gases to this stream. Since this comes from `Mixer-M3` I go ahead and check that mixer (again, the IDs above really help pinpoint the ID of the mixer)
+```bash
+etoh_system.units[58]
+```
+```
+Mixer: M3
+ins...
+[0] biogas  from  AnaerobicDigestion-R601
+    phase: 'g', T: 307.65 K, P: 101325 Pa
+    flow (kmol/hr): Water         37.1
+                    Ethanol       0.000147
+                    AceticAcid    0.00877
+                    Furfural      0.00849
+                    Glycerol      4.27e-08
+                    LacticAcid    2.52e-06
+                    SuccinicAcid  6.7e-09
+                    CH4           351
+                    CO2           337
+outs...
+[0] gas_to_boiler  to  BoilerTurbogenerator-BT
+    phase: 'g', T: 307.65 K, P: 101325 Pa
+    flow (kmol/hr): Water         37.1
+                    Ethanol       0.000147
+                    AceticAcid    0.00877
+                    Furfural      0.00849
+                    Glycerol      4.27e-08
+                    LacticAcid    2.52e-06
+                    SuccinicAcid  6.7e-09
+                    CH4           351
+                    CO2           337
+```
+So what I need to do is that for this mixer, I add another inlet which is the PSA waste gases from my RCF system
+
+```bash
+# Reconnecting streams
+etoh_system.units[58].ins[1] = rcf_system.products[1] # The purge light gases from PSA will go to the boiler turbogenererator
+```
+
+And voila! All set. 
+
+I now create the integrated system and simulate it
+```bash
+integrated_sys = bst.System('RCF_EtOH',
+                        path=(rcf_system, etoh_system))
+integrated_sys.simulate()
+```
+
+Sure enough, the mixer (whose ID will now have changed so we need to display the IDs of the integrated system) will have another inlet, this time also the waste gases from the PSA.
+
