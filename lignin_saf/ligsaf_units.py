@@ -354,7 +354,7 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
 
 
 
-from lignin_saf.ligsaf_settings import rcf_oil_yield, h2_consumption, feed_parameters, catalyst_loading, prices
+from lignin_saf.ligsaf_settings import rcf_oil_yield, h2_consumption, feed_parameters, RCF_catalyst, prices
 
 class HydrogenolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
 
@@ -554,7 +554,7 @@ class HydrogenolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         weight = design['Weight']  # weight parameter stores the value from the 'Weight' key in the design dictionnary
 
 
-        catalyst_cost_total = prices['NiC_catalyst']*catalyst_loading*(feed_parameters['flow']*1e3)
+        catalyst_cost_total = prices['NiC_catalyst']*RCF_catalyst['loading']*(feed_parameters['flow']*1e3)
 
         design['Catalyst loading cost'] = catalyst_cost_total
 
@@ -888,8 +888,20 @@ class PSA(bst.Unit, bst.units.design_tools.PressureVessel):
 
         
   
+class CatalystMixer(bst.Unit):
 
+    _N_ins = 1
+    _N_outs = 1
 
+    def _init(self):
+        pass
+ 
+    
+    def _run(self):
+        pass
+
+    def _design(self):
+        pass
 
         
 

@@ -13,7 +13,7 @@ def create_chemicals():
     hydrogen = tmo.Chemical('Hydrogen')
     methane = tmo.Chemical('Methane')
     activated_carbon = tmo.Chemical('ActivatedCarbon', search_db=False, default=True, phase='s')
-
+    NiC = tmo.Chemical('NiC', search_db=False, default = True, phase = 's')
     
     # Custom chemical properties estimated using NIST ThermoDataEngine (TDE) from Aspen Plus V14
     # Only propylguaiacol was native to Aspen, every other component was user defined
@@ -103,7 +103,7 @@ def create_chemicals():
 
 
     # 4) Extend the base collection
-    ligsaf_chems.extend([methanol, hydrogen, methane, activated_carbon, propylguaiacol, propylsyringol,syringaresinol,g_dimer,
+    ligsaf_chems.extend([methanol, hydrogen, methane,NiC, activated_carbon, propylguaiacol, propylsyringol,syringaresinol,g_dimer,
                   s_oligomer, g_oligomer])
 
     ligsaf_chems.compile()  # Compiling all the chemicals to one string
