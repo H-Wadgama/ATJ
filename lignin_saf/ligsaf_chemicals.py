@@ -12,6 +12,8 @@ def create_chemicals():
     methanol = tmo.Chemical('Methanol')
     hydrogen = tmo.Chemical('Hydrogen')
     methane = tmo.Chemical('Methane')
+    hexane = tmo.Chemical('Hexane')
+    ethyl_acetate = tmo.Chemical('EthylAcetate')
     activated_carbon = tmo.Chemical('ActivatedCarbon', search_db=False, default=True, phase='s')
     NiC = tmo.Chemical('NiC', search_db=False, default = True, phase = 's')
     
@@ -103,7 +105,7 @@ def create_chemicals():
 
 
     # 4) Extend the base collection
-    ligsaf_chems.extend([methanol, hydrogen, methane,NiC, activated_carbon, propylguaiacol, propylsyringol,syringaresinol,g_dimer,
+    ligsaf_chems.extend([methanol, hydrogen, methane, hexane, ethyl_acetate, NiC, activated_carbon, propylguaiacol, propylsyringol,syringaresinol,g_dimer,
                   s_oligomer, g_oligomer])
 
     ligsaf_chems.compile()  # Compiling all the chemicals to one string
