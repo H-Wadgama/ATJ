@@ -51,8 +51,7 @@ RCF_catalyst = {
 
 
 
-cat_replace = 1                   
-catalyst_loading = 0.1            
+     
 h2_biomass_ratio = 0.053958086     # Ratio of mass flow of h2 by the mass flow of dry biomass feed from Bartling et al, SI stream tables (Table S2)
                                    # Main text mentioned 10 L/min/dry kg biomass (STP) but i don't know what the dry kg biomass is normalized to (/day, /hr ?)
 
