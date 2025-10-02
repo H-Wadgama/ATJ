@@ -74,24 +74,26 @@ moisture = 0.2
 
 feedstock_price = 80 # USD/dry metric ton from Bartling et al
 feedstock_price = feedstock_price/kg_per_ton/(1+moisture)
+usd_per_pound = 1.35
+
 
 # Chemicals from cellulosic ethanol model
 # Prices are in 2007 USD (from 2011 Humbird report), and are updated to 2016 USD here 
 # Prices are from September since end of fiscal year
 # Using Federal Reserve Economic Data (FRED) St. Louis Fed data (accessed 9/17/2025)
 
-sulfuric_acid_price = 0.08972 *  (128.9/174.8)      # [USD/kg] Sulfuric acid price update from https://fred.stlouisfed.org/series/WPU0613020T1
-ammonia_price = 0.4486 * (229.7/227.5)              # [USD/kg] Ammonia price update from https://fred.stlouisfed.org/series/WPU061
-cellulase_price = 0.212 * (233.6/180.1)             # [USD/kg] Cellulase price update from https://fred.stlouisfed.org/series/WPU0679
-CSL_price = 0.05682 * (221.3/226.7)                 # [USD/kg] Corn steep liquor price update from https://fred.stlouisfed.org/series/WPU065201. CSL is a nitrogen containing compound
-DAP_price = 0.98692 * (221.3/226.7)                 # [USD/kg] DAP price update from https://fred.stlouisfed.org/series/WPU065201. DAP is a nitrogen containing compound
-caustic_price = 0.07476 * (135.3/116.6)             # [USD/kg] Casutic price update from https://fred.stlouisfed.org/series/WPU06130302
-denaturant_price = 0.756 * (152.0/225.6)            # [USD/kg] Denaturant update from https://fred.stlouisfed.org/series/WPU0571. Denaturant is gasoline
-cooling_tower_chemicals_price = 3.0 * (155.6/165.0) # [USD/kg] Cooling tower chemcials update from https://fred.stlouisfed.org/series/PCU325998325998A. cooling tower chemicals are used for water treatment
-FOD_lime_price = 0.19938 * (237.5/164.6)            # [USD/kg] FGD lime update from https://fred.stlouisfed.org/series/WPU06130213
-boiler_chemicals_price = 4.99586 * (248.8/189.5)    # [USD/kg] Boiler chemicals update from https://fred.stlouisfed.org/series/WPU0613. Boiler chemicals are ash which is inorganic
-
-
+sulfuric_acid_price = 0.08972 *  (128.9/174.8)              # [USD/kg] Sulfuric acid price update from https://fred.stlouisfed.org/series/WPU0613020T1
+ammonia_price = 0.4486 * (229.7/227.5)                      # [USD/kg] Ammonia price update from https://fred.stlouisfed.org/series/WPU061
+cellulase_price = 0.212 * (233.6/180.1)                     # [USD/kg] Cellulase price update from https://fred.stlouisfed.org/series/WPU0679
+CSL_price = 0.05682 * (221.3/226.7)                         # [USD/kg] Corn steep liquor price update from https://fred.stlouisfed.org/series/WPU065201. CSL is a nitrogen containing compound
+DAP_price = 0.98692 * (221.3/226.7)                         # [USD/kg] DAP price update from https://fred.stlouisfed.org/series/WPU065201. DAP is a nitrogen containing compound
+caustic_price = 0.07476 * (135.3/116.6)                     # [USD/kg] Casutic price update from https://fred.stlouisfed.org/series/WPU06130302
+denaturant_price = 0.756 * (152.0/225.6)                    # [USD/kg] Denaturant update from https://fred.stlouisfed.org/series/WPU0571. Denaturant is gasoline
+cooling_tower_chemicals_price = 3.0 * (155.6/165.0)         # [USD/kg] Cooling tower chemcials update from https://fred.stlouisfed.org/series/PCU325998325998A. cooling tower chemicals are used for water treatment
+FOD_lime_price = 0.19938 * (237.5/164.6)                    # [USD/kg] FGD lime update from https://fred.stlouisfed.org/series/WPU06130213
+boiler_chemicals_price = 4.99586 * (248.8/189.5)            # [USD/kg] Boiler chemicals update from https://fred.stlouisfed.org/series/WPU0613. Boiler chemicals are ash which is inorganic
+hexane_price = (712/1000) * usd_per_pound * (226.6/285.6)   # [USD/kg] Price of 712 pounds per tonne for 2018 from https://doi.org/10.1126%2Fscience.aau1567. Price updated to 2016 USD using https://fred.stlouisfed.org/series/WPU0614
+ethyl_acetate_price = 2.5 * usd_per_pound * (226.6/218.9)   # [USD/kg] Price of 2.5 pounds per kg for 2020 from https://doi.org/10.1039%2Fd3ee00965c. Price updated to 2016 USD using https://fred.stlouisfed.org/series/WPU0614
 
 prices = {
     'Feedstock' : feedstock_price,
@@ -107,5 +109,7 @@ prices = {
     'Denaturant' : denaturant_price,
     'CT_chemicals' : cooling_tower_chemicals_price,
     'FOD_lime' : FOD_lime_price,
-    'Boiler_chemicals' : boiler_chemicals_price
+    'Boiler_chemicals' : boiler_chemicals_price,
+    'Hexane' : hexane_price,
+    'EthylAcetate': ethyl_acetate_price
 }
