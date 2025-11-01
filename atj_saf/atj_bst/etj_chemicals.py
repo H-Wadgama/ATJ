@@ -7,7 +7,7 @@ from biorefineries import cellulosic
 def create_chemicals():
 
 
-    atj_chems = cellulosic.create_cellulosic_ethanol_chemicals().copy()    
+    etj_chems = cellulosic.create_cellulosic_ethanol_chemicals().copy()    
     ethylene = tmo.Chemical('Ethylene')
     butene = tmo.Chemical('Butene')          # Butene and hexene are representative surrogates for renewable naphtha
     hexene = tmo.Chemical('Hex-1-ene')  
@@ -32,11 +32,11 @@ def create_chemicals():
 
    
     # 4) Extend the base collection
-    atj_chems.extend([ethylene, butene, hexene, decene, octene, butane, hexane,
+    etj_chems.extend([ethylene, butene, hexene, decene, octene, butane, hexane,
                       octane, decane, octadecane, hydrogen, syndol,
                         ni_sial, co_mo, ])
 
-    atj_chems.compile()  # Compiling all the chemicals to one string
-    return atj_chems
+    etj_chems.compile()  # Compiling all the chemicals to one string
+    return etj_chems
 
 

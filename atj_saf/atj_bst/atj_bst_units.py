@@ -1,11 +1,12 @@
 import math, biosteam as bst, numpy as np
 from typing import Optional
 from biosteam.units.design_tools import (PressureVessel,)
+from math import ceil
 
 
 class AdiabaticReactor(bst.Unit, bst.units.design_tools.PressureVessel):
 
-    '''
+    """
     Reactor class for an adiabatic catalytic reaction. 
     Can be used for one or multiple parallel reactions. 
 
@@ -22,8 +23,8 @@ class AdiabaticReactor(bst.Unit, bst.units.design_tools.PressureVessel):
     catalyst_price :    defaults to $100/kg 
     catalyst_lifetime : defaults to  year
 
-    
-    '''
+    """
+    _F_BM_default = {**bst.design_tools.PressureVessel._F_BM_default}
 
     
     _N_ins = 1
@@ -40,8 +41,7 @@ class AdiabaticReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         'Duty': 'kJ/hr',
         'Catalyst loading cost': 'USD'}
     
-    #_F_BM_default: {'Horizontal pressure vessel': 3.05,
-    #                'Platform and ladders': 1}
+
     
 
     def _init(self, conversion = 1, 
@@ -109,7 +109,7 @@ class AdiabaticReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         design = self.design_results
         baseline_purchase_costs = self.baseline_purchase_costs
 
-        weight = design['Weight']  # weight parameter stores the value from the 'Weight' key in the design dictionnary
+        weight = design['Weight']  
 
         # Calculates the baseline purchase cost based off diameter length and weight
         baseline_purchase_costs.update( 
@@ -122,7 +122,7 @@ class AdiabaticReactor(bst.Unit, bst.units.design_tools.PressureVessel):
 # getter setter to ensure values of conversion 0 < x < 1
     @property
     def conversion(self):
-        '''Conversion of ethanol to ethylene in this reactor'''
+        '''Conversion of primary reactant in reactor'''
         return self._conversion
     @conversion.setter
     def conversion(self, i):
@@ -155,6 +155,8 @@ class IsothermalReactor(bst.Unit, bst.units.design_tools.PressureVessel):
 
     
     '''
+
+    _F_BM_default = {**bst.design_tools.PressureVessel._F_BM_default}
 
     
     _N_ins = 1
@@ -267,6 +269,9 @@ class IsothermalReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         self._conversion = i
 
 
+        
+
+
 
 class EthanolStorageTank(bst.Unit):
     '''
@@ -277,6 +282,7 @@ class EthanolStorageTank(bst.Unit):
     The costing is based off 2 tanks, 750,000 gallons each, and 7 days of storage
     The costing year in the original analysis was 2009. Costing is based off vendor 'Mueller'
     Also assumes one spare
+    Purchase cost provided is multiplied with 1.7 (installation factor) provided in [1]
     Material of construction is ASTM A285 Grade C carbon steel.
 
     [1] Humbird, D., Davis, R., Tao, L., Kinchin, C., Hsu, D., Aden, A., ... & Dudgeon, D. (2011). 
@@ -285,6 +291,9 @@ class EthanolStorageTank(bst.Unit):
     National Renewable Energy Lab.(NREL), Golden, CO (United States).
 
     '''
+
+    _F_BM_default = {**bst.design_tools.PressureVessel._F_BM_default}
+
     _N_ins = 1
     _N_outs = 1
 
@@ -309,7 +318,7 @@ class EthanolStorageTank(bst.Unit):
     def _cost(self):
         D = self.design_results
         purchase_costs = self.baseline_purchase_costs
-        total_cost = 1340000*(bst.CE/521.9)*(D['Total Capacity']/750000)**self.tank_exp
+        total_cost = 1.7*1340000*(bst.CE/521.9)*(D['Total Capacity']/750000)**self.tank_exp 
         purchase_costs['Total Cost'] = total_cost
         
         
@@ -318,8 +327,8 @@ class HydrogenStorageTank(bst.Unit):
     Hydrogen storage tank based off the method by [1]
 
     Method assumes compressd H2 gas storage at 20 MPa
-    Cost of tank calculated was ($600/lb)*(500 lb tank) = $300,000 per tank
-    Cost of tank is then subsequently scaled up using an exponent of 0.75 from [1]
+    Installed cost of tank calculated was ($600/lb)*(500 lb tank) = $300,000 per tank
+    Installed cost of tank is then subsequently scaled up using an exponent of 0.75 from [1]
     
     _N_ins = 1 (just one hydrogen feed)
     _N_outs = 1
@@ -329,6 +338,9 @@ class HydrogenStorageTank(bst.Unit):
     [1] Amos, W. A. (1999). Costs of storing and transporting hydrogen (No. NREL/TP-570-25106; ON: DE00006574). National Renewable Energy Lab.(NREL), Golden, CO (United States).
 
     '''
+
+    _F_BM_default = {**bst.design_tools.PressureVessel._F_BM_default}
+
     _N_ins = 1
     _N_outs = 1
 
@@ -341,23 +353,31 @@ class HydrogenStorageTank(bst.Unit):
         
     def _init(self, storage_period = 7, tank_exp = 0.75):
         self.storage_period = storage_period
-        self.tank_exp = tank_exp
+        self.tank_exp = tank_exp        
+    
+
         
-            
+
+
     def _design(self):
         D = self.design_results
         h2_flow = self.ins[0].F_mass 
         capacity = h2_flow * self.storage_period * 24 
         D['Total Capacity'] = capacity
+        N_vessels = ceil(capacity/1300)
+        self.parallel['self'] = N_vessels
 
     def _cost(self):
         D = self.design_results
         purchase_costs = self.baseline_purchase_costs
-        total_cost = (600*500) * (D['Total Capacity'] /(500/2.2))**self.tank_exp 
-        total_cost_cepci_update = total_cost * (bst.CE/381.1)
-        total_cost_remove_lang_factor = (total_cost_cepci_update/5.04)
+        
+        total_cost = (600*500) * (1300 /(500/2.2))**self.tank_exp
+        purchase_costs['Total Cost'] = total_cost
+
+        # total_cost_cepci_update = total_cost * (bst.CE/381.1)
+        # total_cost_remove_lang_factor = (total_cost_cepci_update/5.04)
         #D['Total Cost'] = total_cost_cepci_update
-        purchase_costs['Total Cost'] = total_cost_remove_lang_factor
+        #purchase_costs['Total Cost'] = total_cost_remove_lang_factor
         
 
 
@@ -367,7 +387,7 @@ class HydrocarbonProductTank(bst.Unit):
     Study assumed same storage vessels for gasoline and diesel. Costing based off Aspen Capital Cost Estimator tool
     Gasoline similar to renewable naphtha and diesel similar to SAF, so we assume 1 type of storage 
     for hydrocarbon products.
-    Cost is given as original equipment cost in 2013 dollars, for a 500,000 gal storage tank at 15 psi, and 250 F
+    Cost is given as installed equipment cost in 2013 dollars, for a 500,000 gal storage tank at 15 psi, and 250 F
     Material of construction is carbon steel. 
     Scaling exponent is 0.7. Study also accounts for one spare tank
     
@@ -379,6 +399,10 @@ class HydrocarbonProductTank(bst.Unit):
 
 
     '''
+
+
+    _F_BM_default = {**bst.design_tools.PressureVessel._F_BM_default}
+
     _N_ins = 1
     _N_outs = 1
 
@@ -402,12 +426,27 @@ class HydrocarbonProductTank(bst.Unit):
     def _cost(self):
         D = self.design_results
         purchase_costs = self.baseline_purchase_costs
-        total_cost = 885400*(bst.CE/567.3)*(D['Total Capacity']/500000)**self.tank_exp
+        total_cost = 1553400*(bst.CE/567.3)*(D['Total Capacity']/500000)**self.tank_exp
 
         purchase_costs['Total Cost'] = total_cost
         
         
     
+  
+class CatalystMixer(bst.Unit):
+
+    _N_ins = 1
+    _N_outs = 1
+
+    def _init(self):
+        pass
+ 
+    
+    def _run(self):
+        pass
+
+    def _design(self):
+        pass
         
     
     
