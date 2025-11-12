@@ -117,7 +117,7 @@ class AdiabaticReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         )
         
         catalyst_loading_cost = self.catalyst_price*design['Catalyst Weight']
-        baseline_purchase_costs['Catalyst loading cost'] = catalyst_loading_cost
+        design['Catalyst loading cost'] = catalyst_loading_cost
          
 # getter setter to ensure values of conversion 0 < x < 1
     @property
@@ -254,7 +254,7 @@ class IsothermalReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         )
         
         catalyst_loading_cost = self.catalyst_price*design['Catalyst Weight']
-        baseline_purchase_costs['Catalyst loading cost'] = catalyst_loading_cost
+        design['Catalyst loading cost'] = catalyst_loading_cost
          
 # getter setter to ensure values of conversion 0 < x < 1
     @property
@@ -438,12 +438,19 @@ class CatalystMixer(bst.Unit):
     _N_ins = 1
     _N_outs = 1
 
+
+    _ins_size_is_fixed = False
+
     def _init(self):
         pass
  
     
     def _run(self):
-        pass
+        feeds = [i for i in self.ins]
+        effluent, = self.outs
+        effluent.mix_from(feeds)
+
+        
 
     def _design(self):
         pass
