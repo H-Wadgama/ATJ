@@ -95,5 +95,6 @@ price_data = {
     'wastewater_treatment' : 1.85e-3,   # [USD/kg] of standard WW from [1]
     'dehydration_catalyst' : 36.81,     # [USD/kg] 
     'oligomerization_catalyst' : 158.4, # [USD/kg]
-    'hydrogenation_catalyst' : 59.12    # [USD/kg]
-}
+    'hydrogenation_catalyst' : 59.12,   # [USD/kg]
+    'electricity' : 0.0782              # [USD/kWh]
+ }
