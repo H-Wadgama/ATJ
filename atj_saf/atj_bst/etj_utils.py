@@ -36,3 +36,11 @@ def calculate_ethanol_flow(req_saf = None, operating_factor = None):
     etoh_flow = ((1/0.56)*(1/0.8)*req_saf*1e6*(1/264.17)*776)/(operating_factor*365*24)
     
     return etoh_flow
+
+
+def ethanol_price_converter(price):
+    '''
+    Function to convert the price of ethanol from USD/gal to USD/kg as BioSTEAM takes in values in USD/kg
+    '''
+    updated_price = (price*264.172)/789  # 789 is the density of ethanol that is at 20 C from Aspen Plus, a value taken from 2011 Humbird report
+    return updated_price
