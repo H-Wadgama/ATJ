@@ -519,3 +519,60 @@ integrated_sys.simulate()
 
 Sure enough, the mixer (whose ID will now have changed so we need to display the IDs of the integrated system) will have another inlet, this time also the waste gases from the PSA.
 
+# Utility consumption or conversion can be understood using the powerutility object
+
+For a boiler turbogenerator, the power utility can be accessed as:
+
+```bash
+F.BT.power_utility    # F references the flowsheet and BT is the Boiler Turbogenerator
+```
+This yields
+```
+PowerUtility:
+consumption: 123 kW
+production: 525 kW
+power: -402 kW
+cost: -31.4 USD/hr
+```
+
+So there is a net production here. 
+Any of the elements within the PowerUtility object can be accessed easily:
+```bash
+F.BT.power_utility.power
+```
+Which yields
+```
+-401.6976008593439
+```
+
+Heat utilities can also be accessed using
+```bash
+F.BT.heat_utilities
+```
+Which yields a list of all the heat utilities. These cannot be accessed like power utilitys using the dot notation as it is a list and not an object
+```
+[<medium_pressure_steam: -2.99e+06 kJ/hr, -82.5 kmol/hr, -22.7 USD/hr>,
+ <high_pressure_steam: -2.14e+07 kJ/hr, -664 kmol/hr, -211 USD/hr>,
+ <natural_gas: -1.89e+07 kJ/hr, -32 kmol/hr, -112 USD/hr>,
+ <low_pressure_steam: -9.33e+05 kJ/hr, -24.1 kmol/hr, -5.73 USD/hr>,
+ <cooling_water: -3.33e+05 kJ/hr, 228 kmol/hr, 0.111 USD/hr>]
+```
+Any individual utility can be accessed however, with an index 
+```bash
+F.BT.heat_utilities[1]
+```
+```
+HeatUtility: high_pressure_steam
+duty:-2.14e+07 kJ/hr
+flow:-664 kmol/hr
+cost:-211 USD/hr
+```
+
+This output is actually an object, and so any individual attribute is accessible using the dot notation.
+```bash
+F.BT.heat_utilities[1].duty
+```
+Yields:
+```
+-21372240.87254549
+```
