@@ -24,7 +24,10 @@ class AdiabaticReactor(bst.Unit, bst.units.design_tools.PressureVessel):
     catalyst_lifetime : defaults to  year
 
     """
-    _F_BM_default = {**bst.design_tools.PressureVessel._F_BM_default}
+    _F_BM_default = {'Horizontal pressure vessel': 3.05,
+                     'Vertical pressure vessel': 4.16,
+                     'Platform and ladders': 1.,
+                     'Catalyst loading cost':1.}
 
     
     _N_ins = 1
@@ -76,6 +79,8 @@ class AdiabaticReactor(bst.Unit, bst.units.design_tools.PressureVessel):
             eff.mix_from(self.ins)
             self.reaction.adiabatic_reaction(eff)
 
+            
+
 
         
     def _design(self):
@@ -117,7 +122,7 @@ class AdiabaticReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         )
         
         catalyst_loading_cost = self.catalyst_price*design['Catalyst Weight']
-        design['Catalyst loading cost'] = catalyst_loading_cost
+        baseline_purchase_costs['Catalyst loading cost'] = catalyst_loading_cost
          
 # getter setter to ensure values of conversion 0 < x < 1
     @property
@@ -156,8 +161,10 @@ class IsothermalReactor(bst.Unit, bst.units.design_tools.PressureVessel):
     
     '''
 
-    _F_BM_default = {**bst.design_tools.PressureVessel._F_BM_default}
-
+    _F_BM_default = {'Horizontal pressure vessel': 3.05,
+                     'Vertical pressure vessel': 4.16,
+                     'Platform and ladders': 1.,
+                     'Catalyst loading cost':1.}
     
     _N_ins = 1
     _N_outs = 1
@@ -254,7 +261,7 @@ class IsothermalReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         )
         
         catalyst_loading_cost = self.catalyst_price*design['Catalyst Weight']
-        design['Catalyst loading cost'] = catalyst_loading_cost
+        baseline_purchase_costs['Catalyst loading cost'] = catalyst_loading_cost
          
 # getter setter to ensure values of conversion 0 < x < 1
     @property
