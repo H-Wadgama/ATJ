@@ -50,13 +50,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 plt.rc('font', family='Arial')
 
-fig, ax = plt.subplots(figsize=(12, 6))
+fig, ax = plt.subplots(figsize=(4.370079, 2.438897638))
 
 custom_colors = [
     '#332288',  # Installed costs
-    "#5C5C5C",  # Catalyst replacement
+    "#8C7201",  # Catalyst replacement
     "#41B09D",  # Utilities excl. electricity
-    "#415A1D",  # Process electricity
+    "#546E30",  # Process electricity
     '#DDCC77',  # Fixed costs
     '#CC6677',  # Hydrogen
     '#AA4499',  # Ethanol
@@ -76,7 +76,7 @@ for i, (cost, label) in enumerate(zip(costs, legend_categories)):
     # positive part
     ax.barh(
         bar_categories, pos, left=bottom_pos,
-        color=custom_colors[i], edgecolor='black', linewidth=1, height=0.5,
+        color=custom_colors[i], edgecolor='black', linewidth=1, height=0.6,
         label=label  # legend
     )
     bottom_pos += pos
@@ -84,20 +84,20 @@ for i, (cost, label) in enumerate(zip(costs, legend_categories)):
     # negative part
     ax.barh(
         bar_categories, neg, left=bottom_neg,
-        color=custom_colors[i], edgecolor='black', linewidth=1, height=0.5
+        color=custom_colors[i], edgecolor='black', linewidth=1, height=0.6
     )
     bottom_neg += neg
     
 
-
+font_size = 11
 
 # Add labels and legend
-ax.set_xlabel('Contribution to MJSP ($/gal)', fontsize = 20)
-ax.set_ylabel('Process section', fontsize = 20)
+ax.set_xlabel('Contribution to MJSP ($/gal)', fontsize = font_size)
+ax.set_ylabel('Process section', fontsize = font_size)
 #ax.legend(title="Cost Category", bbox_to_anchor=(1.05, 1), loc='upper left')
 
 
-ax.tick_params(axis='both', which='major', labelsize=18, width=1, length=10)
+ax.tick_params(axis='both', which='major', labelsize=font_size, width=1, length=10)
 # set the axis line width in pixels
 for axis in 'left', 'bottom', 'top', 'right':
   ax.spines[axis].set_linewidth(1)
@@ -106,10 +106,10 @@ for axis in 'left', 'bottom', 'top', 'right':
 ax.axvline(0, color='black', linewidth=1)
 
 # Set the x positions for the vertical lines (for example, every 0.2 units from -1 to 1)
-xlines = np.arange(-2, 7.5, 0.5)  # adjust range and step as needed
+xlines = np.arange(-3, 8, 0.5)  # adjust range and step as needed
 
 for x in xlines:
-    ax.axvline(x, color='#bdbdbd', linestyle='--', linewidth=1, zorder=0)
+    ax.axvline(x, color='#bdbdbd', linestyle='--', linewidth=0.5, zorder=0)
 
 
 # Define the range for x-axis ticks
@@ -124,8 +124,8 @@ ax.set_xlim(min_tick - 0.5, max_tick + 0.5)
 # Create ticks at -1.0, 0.0, 1.0, ...
 xticks = np.arange(min_tick, max_tick + step, step)
 ax.set_xticks(xticks)
-ax.set_xticklabels([f"{x:.1f}" for x in xticks], fontsize=18)
-ax.set_xlim(-2, 7.5)
+ax.set_xticklabels([f"{x:.1f}" for x in xticks], fontsize=font_size)
+ax.set_xlim(-2.5, 7.5)
 
 
 # Totals per bar
@@ -150,27 +150,27 @@ for i, (category, net, pos, neg) in enumerate(
         f"{net:.2f}$",
         va='center',
         ha=ha,
-        fontsize=16,
-        fontweight='bold'
-    )
+        fontsize=10,
+        #fontweight='bold'
+    )   # Size of $ numbers
+
 
 mjsp = np.sum(costs)
 
-
 ax.text(
-    4.3, 0.4,  # x, y position; adjust as needed
+    3.2, 1.8,  # x, y position; adjust as needed
     f"MJSP = ${mjsp:.2f}/gal",
-    fontsize=20,
+    fontsize=font_size,
     color='black',
     bbox=dict(
         facecolor='white',
         edgecolor='black',
         linewidth=1,         # Thicker box border
-        boxstyle='square,pad=0.3'  # Sharp edges
+        boxstyle='square,pad=0.2'  # Sharp edges
     )
 )
 
 
-plt.tight_layout() 
-# plt.savefig('cost_breakdown.png', bbox_inches = 'tight')
+#plt.tight_layout() 
+#plt.savefig('cost_breakdown.svg', bbox_inches = 'tight')
 plt.show()
