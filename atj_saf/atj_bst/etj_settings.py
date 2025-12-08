@@ -89,7 +89,7 @@ nautral_gas_price = natural_gas_price*natural_gas_HHV
 price_data = {
     'ethanol' : ethanol_price,          # [USD/kg]
     'NG' : natural_gas_price,           # [USD/kg]
-    'hydrogen' : 4.45,                  # [USD/kg] for ATR + CCS determined using H2A. Includes complete value chain costs (production. compression, delivery, and storage)
+    'hydrogen' : 8.46,                  # [USD/kg] for PEM electrolysis. Includes complete value chain costs (production. compression, delivery. Storage accounted for separately through storage tank costs)
     'renewable_naphtha' : 0.71,         # [USD/kg] 
     'renewable_diesel' : 1.888,         # [USD/kg] [2]
     'wastewater_treatment' : 1.85e-3,   # [USD/kg] of standard WW from [1]

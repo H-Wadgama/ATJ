@@ -24,6 +24,7 @@ def create_chemicals():
     syndol = tmo.Chemical('Syndol', search_db = False, default = True, phase = 's')
     ni_sial = tmo.Chemical('Nickel_SiAl', search_db = False, default = True, phase = 's')
     co_mo = tmo.Chemical('CobaltMolybdenum', search_db = False, default = True, phase = 's')
+    coal = tmo.Chemical('Coal', search_db = False, default = True, phase = 's')
     syndol.synonyms = ('Dehydration-Catalyst',) 
     ni_sial.synonyms = ('Oligomerization_Catalyst')
     co_mo.synonyms = ('Hydrogenation_Catalyst')
@@ -34,7 +35,7 @@ def create_chemicals():
     # 4) Extend the base collection
     etj_chems.extend([ethylene, butene, hexene, decene, octene, butane, hexane,
                       octane, decane, octadecane, hydrogen, syndol,
-                        ni_sial, co_mo, ])
+                        ni_sial, co_mo, coal ])
 
     etj_chems.compile()  # Compiling all the chemicals to one string
     return etj_chems

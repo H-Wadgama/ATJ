@@ -2,6 +2,14 @@
 This document is meant to guide new users if they want to generate results from the manuscript
 Everything here is done in the etj_bst_system.ipynb file - .ipynb notebook files are much more intuitive to use! 
 
+The model 
+
+
+
+
+
+
+
 
 # Generating SAF selectivity contour 
 
@@ -118,7 +126,7 @@ get_c = np.vectorize(lambda d: d['C10H20'], otypes=[float])
 X_c = get_c(X)
 
 # now X_c is shape (ny,nx), dtype float64
-print(X_c.shape, X_c.dtype)   # e.g. (50, 40) float64
+# print(X_c.shape, X_c.dtype)   # e.g. (50, 40) float64
 
 
 
@@ -263,6 +271,158 @@ plt.show()
 
 ```
 
-This shall yield the contour plot!
+This shall yield the contour plot for selectivity!
 
 
+
+
+# Generating SAF production capacity contour 
+For this run:
+
+```bash
+ethanol_prices = np.linspace(1.1, 4.6, 20)   # $/kg
+saf_required_vals = np.linspace(9, 100, 20)  # MM gal/year (your x-axis)
+msp_matrix = np.zeros((len(saf_required_vals), len(ethanol_prices)))
+
+# 1) Store the baseline labor price once
+baseline_labor_price = final_tea.labor_cost
+
+for i, saf_required in enumerate(saf_required_vals):
+
+    # 2) Update labor cost based on capacity threshold
+    if saf_required >= 80:   # 80 MM gal/yr threshold
+        final_tea.labor_cost = 2 * baseline_labor_price
+    else:
+        final_tea.labor_cost = baseline_labor_price
+
+    # --- your existing logic for capacity-dependent flows ---
+    atj_sys.ins[0].imass['Ethanol'] = calculate_ethanol_flow(saf_required)
+    atj_sys.ins[0].imass['Water'] = (
+        calculate_ethanol_flow(saf_required)
+        * ((1 - feed_parameters['purity']) / (feed_parameters['purity']))
+    )
+
+    for j, ethanol_price in enumerate(ethanol_prices):
+        etoh_in.price = ethanol_price_converter(ethanol_price)
+
+        # Run the model
+        atj_sys.empty_outlet_streams()
+        atj_sys.empty_recycles()
+        atj_sys.reset_cache()
+        atj_sys.simulate()
+
+        # Solve MSP [$/gal]
+        msp = (final_tea.solve_price(saf_stream) * saf_stream.rho) / 264.172
+        msp_matrix[i, j] = round(msp, 2)
+
+# (optional) reset labor price after the loop if you'll reuse final_tea later
+final_tea.labor_cost = baseline_labor_price
+```
+
+
+And then to generate the plot, run:
+
+```bash
+# Swap X and Y axes: SAF capacity on x-axis, ethanol price on y-axis
+Y, X = np.meshgrid(ethanol_prices, saf_required_vals)
+from matplotlib.ticker import FuncFormatter
+
+
+plt.figure(figsize=(3.13066929134, 2.177598425))
+
+# Filled contour
+contourf = plt.contourf(X, Y, msp_matrix, levels=50, cmap='coolwarm')
+
+# Contour lines + labels
+levels_to_label = [5, 6, 10]
+
+contour_lines = plt.contour(X, Y, msp_matrix, levels=levels_to_label, colors='black', linewidths=1)
+plt.clabel(contour_lines, fmt="%.0f", fontsize=10)
+
+# Axis labels with increased font size
+plt.xlabel('SAF production scale (MM gal/year)', fontsize=10)
+plt.ylabel('Ethanol Price ($/gal)', fontsize=10)
+plt.xticks(fontsize=10)
+plt.yticks(fontsize=10)
+
+
+# y axes formatting
+N_y_labels = 5
+plt.yticks(np.linspace(Y.min(), Y.max(), N_y_labels), fontsize=10) # Changes number of labels
+plt.gca().yaxis.set_major_formatter(FuncFormatter(lambda x, _: f'{x:.2f}')) # Makes sure labels are only 1 decimal place
+
+
+# X-axis tick formatting
+plt.xticks([25, 50, 75, 100], fontsize=10)
+plt.gca().xaxis.set_major_formatter(FuncFormatter(lambda x, _: f'{x:.0f}'))
+
+# Colorbar
+cbar = plt.colorbar(contourf)
+cbar.set_label('Minimum Jet Selling Price [$/gal]', fontsize=10)
+
+from matplotlib.ticker import FuncFormatter
+cbar.formatter = FuncFormatter(lambda x, pos: f'{x:.1f}')
+cbar.update_ticks()
+
+# Shaded gray region for SAF Liftoff report
+plt.contourf(
+    X, Y, msp_matrix,
+    levels=[4.5, 9.6],           # Only shade this band
+    colors=['lightgray'],
+    alpha=0.5
+)
+
+
+
+
+# 2) Dashed boundary at MSP = 4.6
+plt.contour(
+    X, Y, msp_matrix,
+    levels=[4.5],
+    colors='#6c6e6e',   # slightly darker gray if you want
+    linewidths=1,
+    linestyles='--',
+    zorder=4
+)
+
+# 3) Dashed boundary at MSP = 9.6
+plt.contour(
+    X, Y, msp_matrix,
+    levels=[9.6],
+    colors='#6c6e6e',
+    linewidths=1,
+    linestyles='--',
+    zorder=4
+)
+
+
+# Gevo line
+# 3) Dashed boundary at MSP = 9.6
+plt.contour(
+    X, Y, msp_matrix,
+    levels=[7.75],
+    colors="#A6A611",
+    linewidths=1,
+    zorder=4
+)
+
+
+
+baseline_x = 9
+baseline_y = 2.67
+
+# 2. Plot a marker there
+plt.plot(baseline_x, baseline_y,
+        marker='o',
+        markersize=5,
+        markerfacecolor='lightgray', # fill
+        markeredgecolor='black',     # outline
+        markeredgewidth=1,     
+        linewidth = 1,
+        label='Baseline point')
+
+
+plt.savefig("capacity contour.svg", dpi=300)
+plt.tight_layout()
+plt.show()
+```
