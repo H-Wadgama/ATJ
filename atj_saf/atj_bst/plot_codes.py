@@ -8,7 +8,7 @@ def nice_pie(
     subtitle=None,
     colors=None,
     filename=None,
-    figsize=(5, 5),
+    figsize=(3.5, 3.5),
     dpi=500,
     font_family="Arial",
 ):
@@ -65,9 +65,9 @@ def nice_pie(
     PCT_PAD        = 0.05   # separation between connector end and percentage
 
     # Font sizes
-    FS_LABEL   = 14         # Font size for section labels (e.g. 'BT')
-    FS_PERCENT = 14         # Font size for percentages (e.g. '33.6%')
-    FS_TITLE   = 16         # Font size for title and subtitle
+    FS_LABEL   = 10         # Font size for section labels (e.g. 'BT')
+    FS_PERCENT = 10         # Font size for percentages (e.g. '33.6%')
+    FS_TITLE   = 10         # Font size for title and subtitle
 
     # Line styles
     EDGE_LW        = 1    # Slice border width
