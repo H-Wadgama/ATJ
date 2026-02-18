@@ -526,7 +526,7 @@ class HydrogenolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         duty = (rcf_oil_yield['Monomers'])**0.5 * self.ins[0].imol['SolubleLignin'] *1000 * 60.5 * 4.184 
         # 70.7 wt% (equivalent to mol% as studies use it interchangeably) B-O-4 linkages in lignin * Solubilized lignin flow [kmol/hr] * 1000 [mol/kmol] * 60.5 kcal/1 mol of B-0-4 linkage * 4184 kJ/kcal
 
-        heat_utility = self.add_heat_utility(duty, self.T) # BioSTEAM automatically setting utility based off duty
+        heat_utility = self.add_heat_utility(duty/self.N_reactors, self.T) # BioSTEAM automatically setting utility based off duty
                                              
         self.set_design_result('Duty', 'kJ/hr', duty)
         #pressure_drop = self._calculate_pressure_drop()                  
@@ -564,7 +564,6 @@ class HydrogenolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         )
 
         self.parallel['self'] = self.N_reactors # Used to create multiple of the same beds
-
         #add_OPEX = (design['Catalyst loading cost']*2)
         #self._add_OPEX = {'Additional OPEX': add_OPEX} 
         
