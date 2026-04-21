@@ -1,0 +1,25 @@
+# Output files - not tracked in version control
+*.xlsx
+*.png
+*.svg
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environments
+.env
+*.egg-info
+
+# VS Code
+.vscode/
+
+# Claude
+.claude/
