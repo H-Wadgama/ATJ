@@ -1,0 +1,29 @@
+# lignin_saf requirements
+# Tested with Python 3.10 (conda env: pyfuel)
+
+biosteam==2.47.0
+thermosteam==0.46.0
+biorefineries==2.35.1
+flexsolve==0.5.9
+numba==0.60.0
+llvmlite==0.43.0
+numpy==1.26.4
+scipy==1.11.4
+pandas==2.3.3
+openpyxl==3.1.5
+
+# ── Post-install patch required ──────────────────────────────────────────────
+# flexsolve 0.5.9 imports scipy.differentiate.jacobian, which only exists in
+# scipy >= 1.14. With scipy==1.11.4 pinned above, patch the installed file:
+#
+#   In <env>/lib/site-packages/flexsolve/numerical_analysis.py, replace:
+#       from scipy.differentiate import jacobian
+#   with:
+#       try:
+#           from scipy.differentiate import jacobian
+#       except ImportError:
+#           jacobian = None
+#
+# Then delete the cached .pyc:
+#   <env>/lib/site-packages/flexsolve/__pycache__/numerical_analysis.cpython-310.pyc
+# ─────────────────────────────────────────────────────────────────────────────

@@ -4,6 +4,38 @@ This is a BioSTEAM model for lignin valorization to SAF currently under developm
 
 The baseline model assumes a poplar feedstock (2000 dry metric ton per day) and methanol water as a solvent for RCF. The choice of biomass and solvent primarily due to the availability of literature data
 
+## Setup
+
+**Requirements:** Python 3.10, conda
+
+```bash
+conda create -n lignin_saf python=3.10
+conda activate lignin_saf
+pip install -r lignin_saf/requirements.txt
+pip install -e .   # install the local package in editable mode
+```
+
+**Post-install patch for flexsolve:** `flexsolve==0.5.9` imports `scipy.differentiate.jacobian`, which requires scipy >= 1.14 but this project pins `scipy==1.11.4`. After installing, patch the file manually:
+
+In `<env>/lib/site-packages/flexsolve/numerical_analysis.py`, replace:
+```python
+from scipy.differentiate import jacobian
+```
+with:
+```python
+try:
+    from scipy.differentiate import jacobian
+except ImportError:
+    jacobian = None
+```
+Then delete `<env>/lib/site-packages/flexsolve/__pycache__/numerical_analysis.cpython-310.pyc` and restart your kernel.
+
+## Running the model
+
+The main working notebook is `rcf_system.ipynb`. Open it in VS Code or Jupyter and run cells sequentially.
+
+## Process areas
+
 The proposed process areas are*:
 Area 100: Feed storage and handling 
 Area 200: RCF 

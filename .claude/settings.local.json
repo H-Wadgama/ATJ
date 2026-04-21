@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd \"C:\\\\Users\\\\hwadg\\\\OneDrive - The Pennsylvania State University\\\\Shi_Wadgama_shared\\\\Models\\\\ATJSPK\" && python3 -c \"import json; nb = json.load\\(open\\('lignin_saf/rcf_system.ipynb'\\)\\); [print\\(f'CELL {i}: {cell[\\\\\"cell_type\\\\\"]}\\\\n{cell.get\\(\\\\\"source\\\\\", \\\\\"\\\\\"\\)[:500]}...'\\) for i, cell in enumerate\\(nb['cells'][:20]\\)]\")",
+      "Bash(python -c ':*)",
+      "Bash(python -c \"import flexsolve; print\\('flexsolve OK'\\)\")",
+      "Bash(python -c \"import biosteam as bst; print\\('biosteam OK'\\)\")",
+      "Bash(python lignin_saf/rcf_4_21_2026)",
+      "Bash(pip show:*)",
+      "Bash(pip list:*)",
+      "Bash(grep -h \"^import\\\\|^from\" \"C:/Users/mmw6427/OneDrive - The Pennsylvania State University/Shi_Wadgama_shared/Models/ATJSPK/lignin_saf/\"*.py)",
+      "Bash(git config:*)"
+    ]
+  }
+}
