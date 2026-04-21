@@ -45,7 +45,19 @@ This simulates the system and prints the Minimum Jet Selling Price (MJSP) in $/g
 - `lignin_saf/rcf_system.ipynb` — Integrated RCF + cellulosic ethanol system (main active notebook)
 
 **RCF system as a standalone script:**
-- `lignin_saf/rcf_4_21_2026` — Refactored RCF loop as a plain Python script. Builds the same `rcf_system` as the notebook but without the downstream integrated systems. Use this for quick iteration on the RCF loop in isolation.
+- `lignin_saf/rcf_4_21_2026` — Thin entry-point script for the RCF loop. Sets up thermo, defines the Poplar feedstock stream, then calls `create_rcf_system()` from `ligsaf_system.py`. Use this for quick iteration on the RCF loop in isolation.
+
+```python
+# Pattern used in rcf_4_21_2026 — mirrors cellulosic_ethanol_legacy.py
+chems = create_chemicals()
+bst.settings.set_thermo(chems)
+bst.settings.CEPCI = 541.7
+chems.define_group('Poplar', ...)   # must be defined before creating Poplar stream
+poplar_in = bst.Stream('Poplar_In', Poplar=..., Water=..., phase='l', units='kg/d')
+rcf_system = create_rcf_system(ins=poplar_in)
+rcf_system.simulate()
+rcf_system.show()
+```
 
 ## Architecture Overview
 
@@ -94,7 +106,12 @@ Two-reactor RCF process: **poplar → solvolysis + hydrogenolysis → lignin oil
 - `ligsaf_abstract_tea.py` — `AbstractTEA` base class (imported by `ligsaf_tea.py`)
 - `cellulosic_tea.py` — `CellulosicEthanolTEA` used for the integrated system TEA
 - `ligsaf_tea.py` — `ConventionalEthanolTEA` alternative
-- `ligsaf_system.py` — `create_ligsaf_system()` (older standalone version, not used by active notebooks)
+- `ligsaf_system.py` — **`create_rcf_system(ins=None)`** factory function; encapsulates all 20 unit operations, both recycle loops, and all `add_specification` decorators. Returns a ready-to-simulate `bst.System`. Import and call pattern:
+  ```python
+  from lignin_saf.ligsaf_system import create_rcf_system
+  rcf_system = create_rcf_system(ins=poplar_in)  # ins=None uses default feed from ligsaf_settings
+  ```
+  Note: `chems.define_group('Poplar', ...)` must be called before creating any stream with `Poplar` as a component — do this in the calling script after `bst.settings.set_thermo(chems)`, before passing `ins` to the factory.
 
 **Integrated systems built in `rcf_system.ipynb`:**
 - `rcf_system` — RCF loop (MIX100 through FLASH118)
