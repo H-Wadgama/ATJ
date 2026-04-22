@@ -29,6 +29,12 @@ except ImportError:
 ```
 Then delete `<env>/lib/site-packages/flexsolve/__pycache__/numerical_analysis.cpython-310.pyc`.
 
+**graphviz is required** for `system.diagram()` and `system.save_report()`. Install via conda (not pip):
+```bash
+conda install graphviz
+```
+Without graphviz, `save_report` will produce an empty Excel file with no stream or cost data.
+
 Each sub-project also has its own `requirements.txt`:
 - `lignin_saf/requirements.txt` — dependencies for the lignin SAF model only (excludes `qsdsan`)
 
@@ -112,6 +118,25 @@ Two-reactor RCF process: **poplar → solvolysis + hydrogenolysis → lignin oil
   rcf_system = create_rcf_system(ins=poplar_in)  # ins=None uses default feed from ligsaf_settings
   ```
   Note: `chems.define_group('Poplar', ...)` must be called before creating any stream with `Poplar` as a component — do this in the calling script after `bst.settings.set_thermo(chems)`, before passing `ins` to the factory.
+
+**`SolvolysisReactor` sizing model (geometry-based, semi-batch):**
+
+The reactor is sized from biomass loading geometry, not from solvent flow × residence time (the old approach). Key parameters in `ligsaf_settings.py`:
+
+| Parameter | Value | Meaning |
+|---|---|---|
+| `tau_s` | 3 hr | Time on stream per batch (biomass contact time) |
+| `tau_s_res` | 1/3 hr (20 min) | Hydraulic residence time of solvent per pass |
+| `poplar_density` | 485 kg/m³ | Bulk density of poplar chips |
+| `free_frac` | 0.10 | Fraction of reactor volume kept free (headspace) |
+
+Sizing logic in `SolvolysisReactor._size_bed()`:
+- N_total = 4 fixed (3 operating, 1 cleaning); cycle time = tau_s + tau_0 = 4 hr → 6 batches/reactor/day
+- Biomass per batch = 2,000,000 kg/day ÷ 24 batches = 83,333 kg → V_biomass = 172 m³
+- V_free = 10% × 600 = 60 m³; V_solvent (static charge per bed) = 600 − 172 − 60 = 368 m³
+- Q per reactor = V_max / tau_residence = 1,800 m³/hr; superficial velocity (0.02 m/s) sets L/D ≈ 4
+
+**Current model limitation — solvent recirculation not modeled:** The intended physical picture is that solvent recirculates within each operating bed for the full 3-hour time on stream (~9 passes at 20-min hydraulic RT each). However, the BioSTEAM model treats the solvolysis reactor as single-pass flow-through: solvent enters once and exits to hydrogenolysis. The system-level 9 L/kg MeOH:biomass ratio (enforced by `meoh_water_flow` spec in `ligsaf_system.py`) is unaffected. Mass balances and TEA are valid because delignification (70%) is a fixed conversion in `_run()`. To fully capture the recirculation, a pump and internal loop (bleed ~250 m³/hr to hydrogenolysis; recirculation ~1,550 m³/hr back to reactor inlet) would need to be added to the solvolysis unit.
 
 **Integrated systems built in `rcf_system.ipynb`:**
 - `rcf_system` — RCF loop (MIX100 through FLASH118)

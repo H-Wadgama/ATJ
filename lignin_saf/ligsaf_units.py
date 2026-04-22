@@ -71,11 +71,14 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
               'Pressure drop': 'bar',
               'Batch time': 'hr',
               'Turnaround time': 'hr',
+              'Time on stream': 'hr',
               'Residence time': 'hr',
               'Total beds': "",
               'Beds in service': "",
               'Total volume': 'm3',
-              'Reactor volume': 'm3'}
+              'Reactor volume': 'm3',
+              'Biomass volume per bed': 'm3',
+              'Solvent volume per bed': 'm3'}
     
 
 
@@ -92,7 +95,7 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
     tau_0_default: float  = 1                    # from https://doi.org/10.1039/D1EE01642C
     
     # Default superficial velocity of solvent (m/s)
-    superficial_velocity_default: float = 1      # Just assumed 
+    superficial_velocity_default: float = 0.02   # Gives L/D ≈ 4 at Q = V_max/tau_residence = 1800 m³/hr
 
     # Default methanol decomposition (%)
     methanol_decomposition_default: float = 0.005 # From https://doi.org/10.1039/D1EE01642C
@@ -101,9 +104,19 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
     void_frac_default: float = 0.5                # Just assumed here, can be fine tuned once data is known. Assyned because this value gives a low value for pressure drop
 
 
-    # Default working volume fraction 
-    working_vol_default: float = 0.8              # Just assumed based off engineering judgement
- 
+    # Fixed bed configuration
+    N_total_default: int = 4                       # Total beds (3 operating + 1 cleaning)
+    N_working_default: int = 3                     # Beds operating at any time
+
+    # Default hydraulic residence time [hr]
+    tau_residence_default: float = 1/3             # 20 minutes — determines solvent flow rate per reactor
+
+    # Default poplar bulk density [kg/m³]
+    poplar_density_default: float = 485            # Bulk density of poplar chips
+
+    # Default free-space fraction of reactor volume
+    free_frac_default: float = 0.10                # 10% kept free for gas disengagement / headspace
+
     # Default poplar diameter [m]
     poplar_diameter_default: float = 0.004        # https://doi.org/10.1039/D1EE01642C mentions < 5mm, Here 4 mm is considered
     
@@ -114,24 +127,26 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
 
     def _init(
             self,
-            T: Optional[float] = None, 
+            T: Optional[float] = None,
             P: Optional[float] = None,
             tau: Optional[float] = None,
             vessel_material: Optional[str] = None,
             vessel_type: Optional[str] = None,
-            tau_0: Optional[float] = None,  
+            tau_0: Optional[float] = None,
             superficial_velocity: Optional[float] = None,
             methanol_decomposition: Optional[float] = None,
             void_frac: Optional[float] = None,
-            working_vol: Optional[float] = None,
+            tau_residence: Optional[float] = None,
+            poplar_density: Optional[float] = None,
+            free_frac: Optional[float] = None,
             poplar_diameter: Optional[float] = None,
             V_max: Optional[float] = None,
             *,
             reaction_1,
             reaction_2
             ):
-        
-        
+
+
         self.T = self.T_default if T is None else T
         self.P = self.P_default if P is None else P
         self.tau = self.tau_default if tau is None else tau
@@ -141,7 +156,9 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         self.superficial_velocity = self.superficial_velocity_default if superficial_velocity is None else superficial_velocity
         self.methanol_decomposition = self.methanol_decomposition_default if methanol_decomposition is None else methanol_decomposition
         self.void_frac = self.void_frac_default if void_frac is None else void_frac
-        self.working_vol = self.working_vol_default if working_vol is None else working_vol
+        self.tau_residence  = self.tau_residence_default  if tau_residence  is None else tau_residence
+        self.poplar_density = self.poplar_density_default if poplar_density is None else poplar_density
+        self.free_frac      = self.free_frac_default      if free_frac      is None else free_frac
         self.poplar_diameter = self.poplar_diameter_default if poplar_diameter is None else poplar_diameter
         self.V_max = self.V_max_default if V_max is None else V_max
         self.reaction_1 = reaction_1
@@ -156,31 +173,48 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
 
 
     def _size_bed(self):
-        
-        #### Reactor volume sizing ########
 
-        cycle_time = self.tau + self.tau_0                         # [hr] Total time for a cycle of operation (includes reaction + cleaning-loading-unloading)
-        working_vol = self.working_vol                             # Working volume fraction for a reactor to allow suficient mass transfer by allowing enough contact time 
-        solvent = self.ins[1]                                      # Preheated solvent inlet
+        #### Fixed bed configuration ########
 
-        V_theoretical = solvent.F_vol * self.tau                   # [m3] Theoretical volume required for solvolysis 
-        V_actual = V_theoretical/(working_vol * self.void_frac)    # [m3] Actual volume required based off void fraction in poplar bed, and fraction working volume over total reactor length
-        N_working = ceil(V_actual/self.V_max)                      # Number of working reactors, rounded off the to the next number
-        N_offline = ceil(N_working*(self.tau_0/cycle_time))        # Number of offline beds, calculated based off cleaning time and the total cycle time, rounded off to the next number
-        N_total = N_working + N_offline
+        N_total   = 4                                              # Fixed: 3 operating + 1 cleaning
+        N_working = 3
+        cycle_time = self.tau + self.tau_0                         # [hr] 3 hr on-stream + 1 hr cleaning = 4 hr cycle
         V_total = N_total * self.V_max
 
-        
+        #### Biomass loading per batch ########
 
-        ##### Reactor diameter and length ########
+        batches_per_day   = N_total * (24.0 / cycle_time)          # 4 beds × 6 batches/bed/day = 24
+        # ins[0] carries the Poplar group (dry biomass) + Water; BioSTEAM stores in kg/hr
+        dry_biomass_kgday = self.ins[0].imass['Poplar'] * 24.0     # [kg/day]
+        biomass_per_batch = dry_biomass_kgday / batches_per_day    # [kg/batch]
 
-        u  = self.superficial_velocity                      # [m/s]
-        Q_per_reactor_m3 = solvent.F_vol/N_working          # [m3/hr] Volumetric flow rate processed by any reactor
-        self.area = A  = Q_per_reactor_m3/(u*3600)          # [m3] Cross sectional area for each reactor
-        self.diameter = diameter = 2 * (A/np.pi) ** 0.5     # [m] Diameter of each reactor
-        self.length = length = self.V_max/A                 # [m] Length of each reactor
+        #### Bed geometry ########
 
-        
+        V_biomass = biomass_per_batch / self.poplar_density        # [m3] volume occupied by biomass
+        V_free    = self.free_frac * self.V_max                    # [m3] free headspace / gas disengagement
+        V_solvent = self.V_max - V_biomass - V_free                # [m3] static solvent charge per bed
+
+        if V_solvent <= 0:
+            raise ValueError(
+                f"Biomass volume ({V_biomass:.1f} m\u00b3) + free volume ({V_free:.1f} m\u00b3) "
+                f"exceeds reactor volume ({self.V_max} m\u00b3). "
+                "Reduce feed rate or increase V_max."
+            )
+
+        # Store for _design reporting
+        self._V_biomass = V_biomass
+        self._V_solvent = V_solvent
+
+        #### Flow rate and reactor geometry ########
+
+        # Hydraulic RT sets the solvent throughput per reactor during on-stream period
+        Q_per_reactor = self.V_max / self.tau_residence            # [m3/hr]  e.g. 600/0.333 = 1800 m3/hr
+
+        u  = self.superficial_velocity                             # [m/s]
+        self.area = A  = Q_per_reactor / (u * 3600)               # [m2] cross-sectional area
+        self.diameter = diameter = 2 * (A / np.pi) ** 0.5         # [m]
+        self.length   = length   = self.V_max / A                  # [m]
+
         return length, diameter, N_total, N_working, V_total
 
         
@@ -279,15 +313,18 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         
         cycle_time = self.tau + self.tau_0
 
-        self.set_design_result('Diameter', 'ft', diameter)  
+        self.set_design_result('Diameter', 'ft', diameter)
         self.set_design_result('Length', 'ft', length)
         self.set_design_result('Reactor volume', 'm3', self.V_max_default)
         self.set_design_result('Total volume', 'm3', total_volume)
         self.set_design_result('Total beds', '', N_reactors)
         self.set_design_result('Beds in service', '', N_operating)
-        self.set_design_result('Residence time', 'hr', self.tau)
+        self.set_design_result('Time on stream', 'hr', self.tau)
+        self.set_design_result('Residence time', 'hr', self.tau_residence)
         self.set_design_result('Turnaround time', 'hr', self.tau_0)
         self.set_design_result('Batch time', 'hr', cycle_time)
+        self.set_design_result('Biomass volume per bed', 'm3', self._V_biomass)
+        self.set_design_result('Solvent volume per bed', 'm3', self._V_solvent)
 
         
         
