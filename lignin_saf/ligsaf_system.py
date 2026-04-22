@@ -3,7 +3,8 @@ from lignin_saf.ligsaf_units import SolvolysisReactor, HydrogenolysisReactor, PS
 from lignin_saf.ligsaf_chemicals import create_chemicals
 from lignin_saf.ligsaf_settings import (
     rcf_oil_yield, prices, feed_parameters, rcf_conditions,
-    solvolysis_parameters, meoh_h2o, methanol_to_biomass, h2_biomass_ratio, RCF_catalyst
+    solvolysis_parameters, meoh_h2o, methanol_to_biomass, h2_biomass_ratio, RCF_catalyst,
+    poplar_density, free_frac,
 )
 
 
@@ -116,9 +117,13 @@ def create_rcf_system(ins=None):
         outs=('Carbohydrate_Pulp', 'Solvolysis_Liquor'),
         T=rcf_conditions['T'],
         P=rcf_conditions['P'],
-        tau=rcf_conditions['tau_s'],
+        tau=rcf_conditions['tau_s'],               # 3 hr time on stream per batch
+        tau_0=1,                                   # 1 hr cleaning/turnaround
+        tau_residence=rcf_conditions['tau_s_res'], # 20 min hydraulic residence time
         void_frac=0.5,
-        superficial_velocity=0.001,
+        superficial_velocity=0.02,
+        poplar_density=poplar_density,             # 485 kg/m³ bulk density
+        free_frac=free_frac,                       # 10% free headspace
         reaction_1=solvolysis_rxn,
         reaction_2=methanol_decomposition_rxn,
     )
