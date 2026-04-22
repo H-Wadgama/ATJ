@@ -25,6 +25,7 @@ poplar_in = bst.Stream('Poplar_In',
 rcf_system = create_rcf_system(ins=poplar_in)
 rcf_system.simulate()
 rcf_system.show()
-rcf_system.save_report('baseline_2.xlsx')
-#solvolysis_reactor = bst.main_flowsheet.unit.RCF103_S
+rcf_system.save_report('baseline_3.xlsx')
+solvolysis_reactor = bst.main_flowsheet.unit.RCF103_S
 #print(solvolysis_reactor.design_results)
+#print(solvolysis_reactor.purchase_costs)
