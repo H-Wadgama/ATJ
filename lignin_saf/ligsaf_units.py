@@ -95,7 +95,7 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
     tau_0_default: float  = 1                    # from https://doi.org/10.1039/D1EE01642C
     
     # Default superficial velocity of solvent (m/s)
-    superficial_velocity_default: float = 0.02   # Gives L/D ≈ 4 at Q = V_max/tau_residence = 1800 m³/hr
+    superficial_velocity_default: float = 0.01   # Gives L/D ≈ 3 (L ≈ 20 m, D ≈ 6.3 m) at Q = V_solvent/tau_residence
 
     # Default methanol decomposition (%)
     methanol_decomposition_default: float = 0.005 # From https://doi.org/10.1039/D1EE01642C
@@ -207,8 +207,9 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
 
         #### Flow rate and reactor geometry ########
 
-        # Hydraulic RT sets the solvent throughput per reactor during on-stream period
-        Q_per_reactor = self.V_max / self.tau_residence            # [m3/hr]  e.g. 600/0.333 = 1800 m3/hr
+        # Hydraulic RT is defined on the actual solvent volume (not total vessel volume)
+        # tau_residence = V_solvent / Q  →  Q = V_solvent / tau_residence
+        Q_per_reactor = V_solvent / self.tau_residence             # [m3/hr]  e.g. 368/0.333 = 1104 m3/hr
 
         u  = self.superficial_velocity                             # [m/s]
         self.area = A  = Q_per_reactor / (u * 3600)               # [m2] cross-sectional area
