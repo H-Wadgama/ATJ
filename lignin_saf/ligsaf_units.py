@@ -190,13 +190,17 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
 
         #### Bed geometry ########
 
-        V_biomass = biomass_per_batch / self.poplar_density        # [m3] volume occupied by biomass
+        V_biomass = biomass_per_batch / self.poplar_density        # [m3] bulk volume occupied by biomass
         V_free    = self.free_frac * self.V_max                    # [m3] free headspace / gas disengagement
-        V_solvent = self.V_max - V_biomass - V_free                # [m3] static solvent charge per bed
+        # 485 kg/m³ is the bulk density (includes interparticle voids). Only the solid
+        # wood fraction [(1 - void_frac) × V_biomass] excludes solvent. The interparticle
+        # void space [void_frac × V_biomass] is also filled with solvent.
+        V_solid   = (1 - self.void_frac) * V_biomass              # [m3] actual solid wood volume
+        V_solvent = self.V_max - V_solid - V_free                  # [m3] total solvent volume in bed
 
         if V_solvent <= 0:
             raise ValueError(
-                f"Biomass volume ({V_biomass:.1f} m\u00b3) + free volume ({V_free:.1f} m\u00b3) "
+                f"Solid biomass volume ({V_solid:.1f} m\u00b3) + free volume ({V_free:.1f} m\u00b3) "
                 f"exceeds reactor volume ({self.V_max} m\u00b3). "
                 "Reduce feed rate or increase V_max."
             )

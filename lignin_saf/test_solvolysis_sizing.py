@@ -5,7 +5,8 @@ Run with:
     pytest lignin_saf/test_solvolysis_sizing.py -v
 
 These tests verify:
-  1. Volume balance: V_biomass + V_free + V_solvent = V_max
+  1. Volume balance: V_solid + V_free + V_solvent = V_max
+     (V_solid = (1-void_frac)*V_biomass; interparticle voids are filled with solvent)
   2. Batch arithmetic: batches/day × biomass/batch = daily feed
   3. Q calculation: Q = V_solvent / tau_residence  (NOT V_max / tau_residence)
   4. Total system flow: Q_total = N_working × Q_per_reactor
@@ -34,8 +35,9 @@ def sizing_params():
     tau_res      = 1 / 3       # hr  hydraulic RT (20 min)
     N_total      = 4
     N_working    = 3
-    u            = 0.01         # m/s superficial velocity — gives L/D ≈ 3
-    rho_poplar   = 485          # kg/m³
+    u            = 0.01         # m/s superficial velocity — gives L/D ≈ 2.3
+    rho_poplar   = 485          # kg/m³ bulk density
+    void_frac_   = 0.5          # interparticle void fraction
     free_frac_   = 0.10
 
     cycle_time         = tau_s + tau_0                          # 4 hr
@@ -43,9 +45,12 @@ def sizing_params():
     feed_kgday         = feed_parameters['flow'] * 1e3          # 2,000,000 kg/day
     biomass_per_batch  = feed_kgday / batches_per_day           # 83,333.3 kg
 
-    V_biomass = biomass_per_batch / rho_poplar                  # m³
-    V_free    = free_frac_ * V_max                              # m³
-    V_solvent = V_max - V_biomass - V_free                      # m³
+    V_biomass = biomass_per_batch / rho_poplar                  # m³ bulk biomass volume
+    V_free    = free_frac_ * V_max                              # m³ headspace
+    # Interparticle voids (void_frac × V_biomass) are filled with solvent.
+    # Only solid wood [(1-void_frac) × V_biomass] excludes solvent.
+    V_solid   = (1 - void_frac_) * V_biomass                   # m³ actual wood
+    V_solvent = V_max - V_solid - V_free                        # m³ total solvent in bed
 
     Q_per_reactor = V_solvent / tau_res                         # m³/hr
     Q_total       = N_working * Q_per_reactor                   # m³/hr
@@ -57,7 +62,8 @@ def sizing_params():
     return dict(
         V_max=V_max, tau_s=tau_s, tau_0=tau_0, tau_res=tau_res,
         N_total=N_total, N_working=N_working, u=u,
-        rho_poplar=rho_poplar, free_frac=free_frac_,
+        rho_poplar=rho_poplar, void_frac=void_frac_, free_frac=free_frac_,
+        V_solid=V_solid,
         cycle_time=cycle_time, batches_per_day=batches_per_day,
         feed_kgday=feed_kgday, biomass_per_batch=biomass_per_batch,
         V_biomass=V_biomass, V_free=V_free, V_solvent=V_solvent,
@@ -83,15 +89,20 @@ class TestSizingMath:
         assert sizing_params['biomass_per_batch'] == pytest.approx(83333.33, rel=1e-4)
 
     def test_volume_balance(self, sizing_params):
-        """V_biomass + V_free + V_solvent must equal V_max exactly."""
+        """V_solid + V_free + V_solvent must equal V_max exactly."""
         p = sizing_params
-        total = p['V_biomass'] + p['V_free'] + p['V_solvent']
+        total = p['V_solid'] + p['V_free'] + p['V_solvent']
         assert total == pytest.approx(p['V_max'], rel=1e-9)
 
     def test_V_biomass(self, sizing_params):
-        """83,333 kg / 485 kg/m³ ≈ 171.8 m³."""
+        """83,333 kg / 485 kg/m³ ≈ 171.8 m³ bulk volume."""
         p = sizing_params
         assert p['V_biomass'] == pytest.approx(p['biomass_per_batch'] / p['rho_poplar'], rel=1e-6)
+
+    def test_V_solid(self, sizing_params):
+        """Solid wood volume = (1 - void_frac) × V_biomass = 0.5 × 171.8 ≈ 85.9 m³."""
+        p = sizing_params
+        assert p['V_solid'] == pytest.approx((1 - p['void_frac']) * p['V_biomass'], rel=1e-9)
 
     def test_V_free(self, sizing_params):
         """10% of 600 m³ = 60 m³."""
@@ -99,14 +110,22 @@ class TestSizingMath:
         assert p['V_free'] == pytest.approx(p['free_frac'] * p['V_max'], rel=1e-9)
 
     def test_V_solvent_positive(self, sizing_params):
-        """Solvent volume must be positive — biomass + headspace must fit."""
+        """Solvent volume must be positive — solid biomass + headspace must fit."""
         assert sizing_params['V_solvent'] > 0
 
-    def test_V_solvent_value(self, sizing_params):
-        """600 - 171.8 - 60 ≈ 368.2 m³."""
+    def test_V_solvent_includes_interparticle_void(self, sizing_params):
+        """
+        V_solvent = V_max - V_solid - V_free
+                  = (V_max - V_biomass - V_free) + void_frac * V_biomass
+        The interparticle void space (void_frac × V_biomass ≈ 85.9 m³) is solvent,
+        so V_solvent ≈ 454.1 m³, not 368.2 m³ (old incorrect calculation).
+        """
         p = sizing_params
-        expected = p['V_max'] - p['V_biomass'] - p['V_free']
+        expected = p['V_max'] - p['V_solid'] - p['V_free']
         assert p['V_solvent'] == pytest.approx(expected, rel=1e-9)
+        # Check it's larger than the old (incorrect) value
+        old_wrong = p['V_max'] - p['V_biomass'] - p['V_free']
+        assert p['V_solvent'] > old_wrong
 
     def test_Q_uses_V_solvent_not_V_max(self, sizing_params):
         """
@@ -126,10 +145,10 @@ class TestSizingMath:
         )
 
     def test_Q_per_reactor_approx(self, sizing_params):
-        """For 2000 DMT/day: Q per reactor ≈ 1104 m³/hr (not 1800 which would be V_max/tau_res)."""
+        """For 2000 DMT/day: Q per reactor ≈ 1362 m³/hr (V_solvent ≈ 454 m³ / 20 min)."""
         p = sizing_params
-        # V_solvent ≈ 368 m³, tau_res = 1/3 hr → Q ≈ 1104 m³/hr
-        assert p['Q_per_reactor'] == pytest.approx(1104, abs=10)
+        # V_solvent ≈ 454 m³, tau_res = 1/3 hr → Q ≈ 1362 m³/hr
+        assert p['Q_per_reactor'] == pytest.approx(1362, abs=10)
 
     def test_total_flow_three_reactors(self, sizing_params):
         """Total Q = N_working × Q_per_reactor = 3 × 1104 ≈ 3312 m³/hr."""
@@ -249,21 +268,21 @@ class TestDesignResults:
         assert simulated_reactor.design_results['Batch time'] == pytest.approx(4.0)
 
     def test_V_biomass_approx(self, simulated_reactor):
-        """Biomass volume per bed ≈ 171.8 m³ for 2000 DMT/day."""
+        """Bulk biomass volume per bed ≈ 171.8 m³ for 2000 DMT/day."""
         V_bm = simulated_reactor.design_results['Biomass volume per bed']
         assert V_bm == pytest.approx(171.8, abs=1.0)
 
     def test_V_solvent_approx(self, simulated_reactor):
-        """Solvent volume per bed ≈ 368.2 m³ for 2000 DMT/day."""
+        """Solvent volume per bed ≈ 454.1 m³ (includes interparticle void space)."""
         V_sol = simulated_reactor.design_results['Solvent volume per bed']
-        assert V_sol == pytest.approx(368.2, abs=1.0)
+        assert V_sol == pytest.approx(454.1, abs=1.0)
 
     def test_volume_balance_in_results(self, simulated_reactor):
-        """V_biomass + V_free + V_solvent == V_max from design_results."""
-        dr = simulated_reactor.design_results
-        total = (dr['Biomass volume per bed']
-                 + free_frac * 600
-                 + dr['Solvent volume per bed'])
+        """V_solid + V_free + V_solvent == V_max (solid = (1-void_frac)*V_biomass)."""
+        dr       = simulated_reactor.design_results
+        void_frac_ = simulated_reactor.void_frac
+        V_solid  = (1 - void_frac_) * dr['Biomass volume per bed']
+        total    = V_solid + free_frac * 600 + dr['Solvent volume per bed']
         assert total == pytest.approx(600, abs=0.5)
 
     def test_Q_based_on_V_solvent(self, simulated_reactor):

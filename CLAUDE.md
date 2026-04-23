@@ -132,19 +132,19 @@ The reactor is sized from biomass loading geometry, not from solvent flow × res
 
 Sizing logic in `SolvolysisReactor._size_bed()`:
 - N_total = 4 fixed (3 operating, 1 cleaning); cycle time = tau_s + tau_0 = 4 hr → 6 batches/reactor/day
-- Biomass per batch = 2,000,000 kg/day ÷ 24 batches = 83,333 kg → V_biomass = 172 m³
-- V_free = 10% × 600 = 60 m³; V_solvent (static charge per bed) = 600 − 172 − 60 = 368 m³
-- **Q per reactor = V_solvent / tau_residence** = 368 / (1/3) ≈ **1,104 m³/hr** (hydraulic RT is defined on solvent volume, not total vessel volume — using V_max would give 1,800 m³/hr and is wrong)
-- Total flow across 3 operating reactors = 3 × 1,104 = **3,312 m³/hr**
-- Superficial velocity (0.01 m/s) sets reactor geometry: D ≈ 6.3 m, L ≈ 20 m, L/D ≈ 3.1
-- Note: BioSTEAM vessel cost correlation is valid for L ≤ 40 ft (12 m); vessel length (~20 m = 64 ft) exceeds this. A `CostWarning` is expected and cost is extrapolated — this is acceptable for large custom pressure vessels.
+- Biomass per batch = 2,000,000 kg/day ÷ 24 batches = 83,333 kg → V_biomass = 171.8 m³ (bulk volume at 485 kg/m³)
+- V_solid = (1 − void_frac) × V_biomass = 0.5 × 171.8 = 85.9 m³ (actual wood; interparticle voids are solvent)
+- V_free = 10% × 600 = 60 m³; V_solvent (static charge per bed) = 600 − 85.9 − 60 = **454.1 m³**
+- **Q per reactor = V_solvent / tau_residence** = 454.1 / (1/3) ≈ **1,362 m³/hr** (hydraulic RT is defined on fluid volume only — using V_max would give 1,800 m³/hr and is incorrect)
+- Total flow across 3 operating reactors = 3 × 1,362 = **4,086 m³/hr**
+- Superficial velocity (0.01 m/s) sets reactor geometry: D ≈ 6.9 m, L ≈ 15.9 m, L/D ≈ 2.3
+- BioSTEAM vessel cost correlation is valid for L ≤ 40 ft (12 m); vessel length (~16 m = 52 ft) exceeds this. A `CostWarning` is expected and cost is extrapolated — acceptable for large custom pressure vessels.
+- BioSTEAM model treats the reactor as single-pass flow-through (no internal recirculation). Mass balances and TEA are valid because delignification (70%) is a fixed conversion in `_run()`.
 
-**Tests:** `lignin_saf/test_solvolysis_sizing.py` — 26 pytest tests covering volume balance, batch arithmetic, Q correctness (V_solvent not V_max), L/D, and design results. Run with:
+**Tests:** `lignin_saf/test_solvolysis_sizing.py` — pytest suite covering volume balance (V_solid + V_free + V_solvent = V_max), batch arithmetic, Q correctness (V_solvent not V_max), L/D bounds, and all design result keys. Run with:
 ```bash
 pytest lignin_saf/test_solvolysis_sizing.py -v
 ```
-
-**Current model limitation — solvent recirculation not modeled:** The intended physical picture is that solvent recirculates within each operating bed for the full 3-hour time on stream (~9 passes at 20-min hydraulic RT each). However, the BioSTEAM model treats the solvolysis reactor as single-pass flow-through: solvent enters once and exits to hydrogenolysis. The system-level 9 L/kg MeOH:biomass ratio (enforced by `meoh_water_flow` spec in `ligsaf_system.py`) is unaffected. Mass balances and TEA are valid because delignification (70%) is a fixed conversion in `_run()`. To fully capture the recirculation, a pump and internal loop (bleed ~250 m³/hr to hydrogenolysis; recirculation ~2,208 m³/hr back to reactor inlet) would need to be added to the solvolysis unit.
 
 **Integrated systems built in `rcf_system.ipynb`:**
 - `rcf_system` — RCF loop (MIX100 through FLASH118)

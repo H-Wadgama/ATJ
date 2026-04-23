@@ -30,7 +30,7 @@ rcf_system = bst.System('RCF_System',
 | MIX100 | `meoh_h2o_mix` | Mixer | Mix fresh MeOH + MeOH recycle | — |
 | PUMP101 | `meoh_pump` | Pump | Pressurize MeOH | P = 60 bar |
 | HX102 | `meoh_heater` | HXutility | Heat MeOH | T = 200°C, rigorous VLE |
-| RCF103-S | `solvolysis_reactor` | `SolvolysisReactor` (custom) | Solvolysis: delignify biomass; produce pulp + liquor | T=200°C, P=60 bar, τ=2 hr, void_frac=0.5, v=0.001 m/s |
+| RCF103_S | `solvolysis_reactor` | `SolvolysisReactor` (custom) | Solvolysis: delignify biomass; produce pulp + liquor | T=200°C, P=60 bar, τ_s=3 hr (time on stream), τ_0=1 hr (cleaning), τ_res=20 min, void_frac=0.5, v=0.01 m/s |
 | MIX104 | `h2_mixer` | Mixer | Mix fresh H₂ + H₂ recycle | — |
 | HX105 | `h2_pre_heat` | HXutility | Heat H₂ | T = 200°C, rigorous |
 | RCF106-H | `hydrogenolysis_reactor` | `HydrogenolysisReactor` (custom) | Hydrogenolyze lignin oil to C5–C15 monomers | T=200°C, P=60 bar, τ=1 hr, v=0.003 m/s, N_reactors=8 |
@@ -72,7 +72,7 @@ Recycle specs: fresh feed in each mixer is adjusted so that `fresh + recycle = r
 
 | Parameter | Value |
 |---|---|
-| Solvolysis T / P / τ | 200°C / 60 bar / 2 hr |
+| Solvolysis T / P / τ | 200°C / 60 bar / 3 hr (time on stream) + 20 min hydraulic RT |
 | Hydrogenolysis T / P / τ | 200°C / 60 bar / 1 hr |
 | MeOH:biomass ratio | 9 L/kg dry biomass |
 | H₂:biomass ratio | 0.054 kg H₂/kg dry biomass |
