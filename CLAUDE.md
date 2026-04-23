@@ -121,25 +121,38 @@ Two-reactor RCF process: **poplar → solvolysis + hydrogenolysis → lignin oil
 
 **`SolvolysisReactor` sizing model (geometry-based, semi-batch):**
 
-The reactor is sized from biomass loading geometry, not from solvent flow × residence time (the old approach). Key parameters in `ligsaf_settings.py`:
+Reactor sizing is driven by two user-defined parameters in `ligsaf_settings.py`: the per-pass solvent loading (`methanol_loading_per_pass`) and a hard vessel-size ceiling (`V_max_limit`). `_size_bed()` iterates N_total upward from 2 and stops at the minimum number of reactors that keeps each vessel at or below the limit.
 
 | Parameter | Value | Meaning |
 |---|---|---|
+| `methanol_loading_per_pass` | 5.45 L/kg | Per-pass solvent charge inside one reactor bed per batch, per kg dry biomass. **Primary sizing input — change this to resize the system.** |
+| `V_max_limit` | 600 m³ | Hard upper bound on vessel volume; no reactor may exceed this. |
 | `tau_s` | 3 hr | Time on stream per batch (biomass contact time) |
 | `tau_s_res` | 1/3 hr (20 min) | Hydraulic residence time of solvent per pass |
 | `poplar_density` | 485 kg/m³ | Bulk density of poplar chips |
 | `free_frac` | 0.10 | Fraction of reactor volume kept free (headspace) |
 
-Sizing logic in `SolvolysisReactor._size_bed()`:
-- N_total = 4 fixed (3 operating, 1 cleaning); cycle time = tau_s + tau_0 = 4 hr → 6 batches/reactor/day
-- Biomass per batch = 2,000,000 kg/day ÷ 24 batches = 83,333 kg → V_biomass = 171.8 m³ (bulk volume at 485 kg/m³)
-- V_solid = (1 − void_frac) × V_biomass = 0.5 × 171.8 = 85.9 m³ (actual wood; interparticle voids are solvent)
-- V_free = 10% × 600 = 60 m³; V_solvent (static charge per bed) = 600 − 85.9 − 60 = **454.1 m³**
-- **Q per reactor = V_solvent / tau_residence** = 454.1 / (1/3) ≈ **1,362 m³/hr** (hydraulic RT is defined on fluid volume only — using V_max would give 1,800 m³/hr and is incorrect)
-- Total flow across 3 operating reactors = 3 × 1,362 = **4,086 m³/hr**
-- Superficial velocity (0.01 m/s) sets reactor geometry: D ≈ 6.9 m, L ≈ 15.9 m, L/D ≈ 2.3
+Sizing logic in `SolvolysisReactor._size_bed()` for each candidate N_total:
+- cycle_time = tau_s + tau_0 = 4 hr → 6 batches/reactor/day
+- biomass_per_batch = 2,000,000 kg/day ÷ (N_total × 6 batches/day)
+- V_solid = (1 − void_frac) × biomass_per_batch / poplar_density  (actual wood; interparticle voids are solvent)
+- V_solvent = methanol_loading_per_pass × biomass_per_batch / 1000  (solvent charge, L → m³)
+- V_max = (V_solid + V_solvent) / (1 − free_frac)  ← accept if V_max ≤ V_max_limit + 0.5 m³
+
+**Base case (5.45 L/kg):** N_total = 4, V_max ≈ 600 m³, 24 batches/day, biomass/batch = 83,333 kg, V_solvent = 454 m³/bed.
+
+**Example sensitivity (2,000 DMT/day feed, V_max_limit = 600 m³):**
+| `methanol_loading_per_pass` | N_total | V_max (m³) | Biomass/reactor (kg) |
+|---|---|---|---|
+| 5.45 L/kg | 4 | ~600 | 83,333 |
+| 6.39–7.07 L/kg | 5 | 550–600 | 66,667 |
+| 11.93 L/kg | 8 | ~600 | 41,667 |
+
+**Q per reactor = V_solvent / tau_residence** (hydraulic RT defined on fluid volume only — using V_max would be incorrect). Total flow = N_working × Q_per_reactor. Superficial velocity (0.01 m/s) sets D and L from Q.
+
 - BioSTEAM vessel cost correlation is valid for L ≤ 40 ft (12 m); vessel length (~16 m = 52 ft) exceeds this. A `CostWarning` is expected and cost is extrapolated — acceptable for large custom pressure vessels.
 - BioSTEAM model treats the reactor as single-pass flow-through (no internal recirculation). Mass balances and TEA are valid because delignification (70%) is a fixed conversion in `_run()`.
+- **`methanol_to_biomass = 9 L/kg`** is a separate parameter in `ligsaf_settings.py` that controls the total MeOH mass balance flow (fresh + recycle) via the `meoh_water_flow` specification in `ligsaf_system.py`. It is **not** the same as `methanol_loading_per_pass` and is not updated automatically when you change the per-pass loading.
 
 **Tests:** `lignin_saf/test_solvolysis_sizing.py` — pytest suite covering volume balance (V_solid + V_free + V_solvent = V_max), batch arithmetic, Q correctness (V_solvent not V_max), L/D bounds, and all design result keys. Run with:
 ```bash

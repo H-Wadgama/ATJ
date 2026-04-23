@@ -20,7 +20,7 @@ rcf_system = bst.System('RCF_System',
 | Stream | Contents | Conditions |
 |---|---|---|
 | `poplar_in` | 2,000 dry MT/day poplar + 20% moisture | Liquid, ambient |
-| `meoh_in` | Fresh methanol, 9 L/kg dry biomass | Liquid |
+| `meoh_in` | Fresh methanol make-up; system-level loading fixed at 9 L/kg dry biomass by `meoh_water_flow` spec | Liquid |
 | `hydrogen_in` | Fresh H₂, 0.054 kg/kg dry biomass (from PEM electrolysis) | Gas, 80°C, 30 bar |
 
 ## Unit Operations
@@ -30,7 +30,7 @@ rcf_system = bst.System('RCF_System',
 | MIX100 | `meoh_h2o_mix` | Mixer | Mix fresh MeOH + MeOH recycle | — |
 | PUMP101 | `meoh_pump` | Pump | Pressurize MeOH | P = 60 bar |
 | HX102 | `meoh_heater` | HXutility | Heat MeOH | T = 200°C, rigorous VLE |
-| RCF103_S | `solvolysis_reactor` | `SolvolysisReactor` (custom) | Solvolysis: delignify biomass; produce pulp + liquor | T=200°C, P=60 bar, τ_s=3 hr (time on stream), τ_0=1 hr (cleaning), τ_res=20 min, void_frac=0.5, v=0.01 m/s |
+| RCF103_S | `solvolysis_reactor` | `SolvolysisReactor` (custom) | Solvolysis: delignify biomass; produce pulp + liquor | T=200°C, P=60 bar, τ_s=3 hr (time on stream), τ_0=1 hr (cleaning), τ_res=20 min, void_frac=0.5, v=0.01 m/s, solvent_loading=5.45 L/kg, V_max_limit=600 m³ |
 | MIX104 | `h2_mixer` | Mixer | Mix fresh H₂ + H₂ recycle | — |
 | HX105 | `h2_pre_heat` | HXutility | Heat H₂ | T = 200°C, rigorous |
 | RCF106-H | `hydrogenolysis_reactor` | `HydrogenolysisReactor` (custom) | Hydrogenolyze lignin oil to C5–C15 monomers | T=200°C, P=60 bar, τ=1 hr, v=0.003 m/s, N_reactors=8 |
@@ -74,7 +74,9 @@ Recycle specs: fresh feed in each mixer is adjusted so that `fresh + recycle = r
 |---|---|
 | Solvolysis T / P / τ | 200°C / 60 bar / 3 hr (time on stream) + 20 min hydraulic RT |
 | Hydrogenolysis T / P / τ | 200°C / 60 bar / 1 hr |
-| MeOH:biomass ratio | 9 L/kg dry biomass |
+| Per-pass solvent loading (`methanol_loading_per_pass`) | 5.45 L/kg dry biomass — drives reactor SIZING (N_total and V_max computed from this) |
+| Max vessel volume (`V_max_limit`) | 600 m³ — hard upper bound; N_total is the minimum number of reactors such that V_max ≤ this limit |
+| System-level MeOH loading (`methanol_to_biomass`) | 9 L/kg dry biomass — enforces total MeOH mass balance flow in `meoh_water_flow` spec; independent of reactor sizing |
 | H₂:biomass ratio | 0.054 kg H₂/kg dry biomass |
 | NiC catalyst loading | 0.1 kg/kg dry biomass |
 | Lignin delignification | 70% → RCF oil |
