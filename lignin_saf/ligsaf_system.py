@@ -5,6 +5,7 @@ from lignin_saf.ligsaf_settings import (
     rcf_oil_yield, prices, feed_parameters, rcf_conditions,
     solvolysis_parameters, meoh_h2o, methanol_to_biomass, h2_biomass_ratio, RCF_catalyst,
     poplar_density, free_frac,
+    methanol_loading_per_pass, V_max_limit,
 )
 
 
@@ -124,6 +125,8 @@ def create_rcf_system(ins=None):
         superficial_velocity=0.01,
         poplar_density=poplar_density,             # 485 kg/m³ bulk density
         free_frac=free_frac,                       # 10% free headspace
+        solvent_loading=methanol_loading_per_pass, # L/kg per-pass charge — drives N_total and V_max
+        V_max_limit=V_max_limit,                   # hard upper bound on vessel volume
         reaction_1=solvolysis_rxn,
         reaction_2=methanol_decomposition_rxn,
     )

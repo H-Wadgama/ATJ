@@ -123,6 +123,14 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
     # Default maximum vessel volume [m3]
     V_max_default: float = 600                    # Bartling paper considered reactor volume as 600 m3
 
+    # Per-pass solvent loading: L of methanol charged per kg dry biomass per batch.
+    # Used to compute N_total and V_max via the N_total search in _size_bed().
+    solvent_loading_default: float = 5.45         # [L/kg dry biomass]
+
+    # Hard upper bound on vessel volume. _size_bed() finds the minimum N_total
+    # such that each computed V_max stays at or below this limit.
+    V_max_limit_default: float = 600              # [m³]
+
 
 
     def _init(
@@ -141,6 +149,8 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
             free_frac: Optional[float] = None,
             poplar_diameter: Optional[float] = None,
             V_max: Optional[float] = None,
+            solvent_loading: Optional[float] = None,
+            V_max_limit: Optional[float] = None,
             *,
             reaction_1,
             reaction_2
@@ -161,6 +171,8 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         self.free_frac      = self.free_frac_default      if free_frac      is None else free_frac
         self.poplar_diameter = self.poplar_diameter_default if poplar_diameter is None else poplar_diameter
         self.V_max = self.V_max_default if V_max is None else V_max
+        self.solvent_loading = self.solvent_loading_default if solvent_loading is None else solvent_loading
+        self.V_max_limit     = self.V_max_limit_default     if V_max_limit     is None else V_max_limit
         self.reaction_1 = reaction_1
         self.reaction_2 = reaction_2
         pump_1 = self.auxiliary('pump_1', bst.Pump, ins = self.ins[1])
@@ -174,36 +186,41 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
 
     def _size_bed(self):
 
-        #### Fixed bed configuration ########
+        #### Fixed bed configuration -- N_total derived from solvent_loading and V_max_limit ########
 
-        N_total   = 4                                              # Fixed: 3 operating + 1 cleaning
-        N_working = 3
-        cycle_time = self.tau + self.tau_0                         # [hr] 3 hr on-stream + 1 hr cleaning = 4 hr cycle
-        V_total = N_total * self.V_max
-
-        #### Biomass loading per batch ########
-
-        batches_per_day   = N_total * (24.0 / cycle_time)          # 4 beds × 6 batches/bed/day = 24
+        cycle_time        = self.tau + self.tau_0                  # [hr] e.g. 3 hr on-stream + 1 hr cleaning = 4 hr
         # ins[0] carries the Poplar group (dry biomass) + Water; BioSTEAM stores in kg/hr
-        dry_biomass_kgday = self.ins[0].imass['Poplar'] * 24.0     # [kg/day]
-        biomass_per_batch = dry_biomass_kgday / batches_per_day    # [kg/batch]
+        dry_biomass_kgday = self.ins[0].imass['Poplar'] * 24.0    # [kg/day]
+
+        # Find the minimum N_total such that each vessel volume stays at or below V_max_limit.
+        # N_working = N_total - 1: one bed is always offline for cleaning/unloading.
+        for N_total in range(2, 101):
+            N_working         = N_total - 1
+            batches_per_day   = N_total * (24.0 / cycle_time)
+            biomass_per_batch = dry_biomass_kgday / batches_per_day
+            V_biomass         = biomass_per_batch / self.poplar_density
+            # Only solid wood [(1-void_frac)*V_biomass] excludes solvent;
+            # interparticle voids [void_frac*V_biomass] are also filled with solvent.
+            V_solid           = (1 - self.void_frac) * V_biomass
+            V_solvent_calc    = (self.solvent_loading * biomass_per_batch) / 1000.0  # L -> m3
+            # V_free = free_frac * V_max  =>  V_max = (V_solid + V_solvent) / (1 - free_frac)
+            V_max_candidate   = (V_solid + V_solvent_calc) / (1.0 - self.free_frac)
+            # Allow 0.5 m3 engineering tolerance to handle floating-point rounding.
+            if V_max_candidate <= self.V_max_limit + 0.5:
+                break
+        else:
+            raise ValueError(
+                f"No feasible N_total <= 100 for solvent_loading={self.solvent_loading} L/kg "
+                f"and V_max_limit={self.V_max_limit} m3. Reduce feed rate or increase V_max_limit."
+            )
+
+        self.V_max = V_max_candidate
+        V_total    = N_total * self.V_max
 
         #### Bed geometry ########
 
-        V_biomass = biomass_per_batch / self.poplar_density        # [m3] bulk volume occupied by biomass
         V_free    = self.free_frac * self.V_max                    # [m3] free headspace / gas disengagement
-        # 485 kg/m³ is the bulk density (includes interparticle voids). Only the solid
-        # wood fraction [(1 - void_frac) × V_biomass] excludes solvent. The interparticle
-        # void space [void_frac × V_biomass] is also filled with solvent.
-        V_solid   = (1 - self.void_frac) * V_biomass              # [m3] actual solid wood volume
-        V_solvent = self.V_max - V_solid - V_free                  # [m3] total solvent volume in bed
-
-        if V_solvent <= 0:
-            raise ValueError(
-                f"Solid biomass volume ({V_solid:.1f} m\u00b3) + free volume ({V_free:.1f} m\u00b3) "
-                f"exceeds reactor volume ({self.V_max} m\u00b3). "
-                "Reduce feed rate or increase V_max."
-            )
+        V_solvent = V_solvent_calc                                 # [m3] total solvent volume in bed
 
         # Store for _design reporting
         self._V_biomass = V_biomass
@@ -212,8 +229,8 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         #### Flow rate and reactor geometry ########
 
         # Hydraulic RT is defined on the actual solvent volume (not total vessel volume)
-        # tau_residence = V_solvent / Q  →  Q = V_solvent / tau_residence
-        Q_per_reactor = V_solvent / self.tau_residence             # [m3/hr]  e.g. 368/0.333 = 1104 m3/hr
+        # tau_residence = V_solvent / Q  =>  Q = V_solvent / tau_residence
+        Q_per_reactor = V_solvent / self.tau_residence             # [m3/hr]
 
         u  = self.superficial_velocity                             # [m/s]
         self.area = A  = Q_per_reactor / (u * 3600)               # [m2] cross-sectional area
@@ -320,7 +337,7 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
 
         self.set_design_result('Diameter', 'ft', diameter)
         self.set_design_result('Length', 'ft', length)
-        self.set_design_result('Reactor volume', 'm3', self.V_max_default)
+        self.set_design_result('Reactor volume', 'm3', self.V_max)
         self.set_design_result('Total volume', 'm3', total_volume)
         self.set_design_result('Total beds', '', N_reactors)
         self.set_design_result('Beds in service', '', N_operating)

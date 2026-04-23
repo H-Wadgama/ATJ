@@ -28,6 +28,15 @@ methanol_to_biomass = 9            # [L/kg] from https://doi.org/10.1016/j.copbi
                                    # Surprisingly, Bartling et al assumes a 9L/kg for a flow through
                                    # configuration which is very less.
 
+# Per-pass solvent loading: amount of methanol charged inside one reactor bed per batch,
+# per kg of dry biomass. This drives reactor SIZING (N_total and V_max computed from it).
+# Distinct from methanol_to_biomass above, which is the system-level MeOH mass balance loading.
+methanol_loading_per_pass = 5.45   # [L/kg dry biomass]
+
+# Maximum allowable volume per reactor vessel. N_total is the minimum number of reactors
+# such that each vessel stays at or below this limit.
+V_max_limit = 600                  # [m³]
+
 
 h2_consumption = 0.01241           # h2 consumption per kg dry biomass feed. Roughly 0.02958 kg H2 consumed per kg RCF oil, I just back calculated it in terms of dry biomass feed so I can use it as an input parameter
 
