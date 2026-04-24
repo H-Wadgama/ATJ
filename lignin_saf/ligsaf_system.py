@@ -3,7 +3,7 @@ from lignin_saf.ligsaf_units import SolvolysisReactor, HydrogenolysisReactor, PS
 from lignin_saf.ligsaf_chemicals import create_chemicals
 from lignin_saf.ligsaf_settings import (
     rcf_oil_yield, prices, feed_parameters, rcf_conditions,
-    solvolysis_parameters, meoh_h2o, methanol_to_biomass, h2_biomass_ratio, RCF_catalyst,
+    solvolysis_parameters, meoh_h2o, h2_biomass_ratio, RCF_catalyst,
     poplar_density, free_frac,
     methanol_loading_per_pass, V_max_limit,
 )
@@ -57,8 +57,8 @@ def create_rcf_system(ins=None):
 
     # ── Co-feeds ──────────────────────────────────────────────────────────────
     meoh_in = bst.Stream('Meoh_in',
-                         Methanol=(methanol_to_biomass * feed_parameters['flow'] * 1e3 * 0.9),
-                         Water=methanol_to_biomass * feed_parameters['flow'] * 1e3 * (1 / meoh_h2o) * 0.9,
+                         Methanol=methanol_loading_per_pass * feed_parameters['flow'] * 1e3 * meoh_h2o / (meoh_h2o + 1),
+                         Water=methanol_loading_per_pass * feed_parameters['flow'] * 1e3 / (meoh_h2o + 1),
                          phase='l', units='L/d')
 
     hydrogen_in = bst.Stream('Hydrogen_In',
@@ -77,18 +77,19 @@ def create_rcf_system(ins=None):
     def meoh_water_flow():
         fresh_solvent = meoh_h2o_mix.ins[0]
         recycle_solvent = meoh_h2o_mix.ins[1]
+        total_vol_hr = (methanol_loading_per_pass * feed_parameters['flow'] * 1e3) / 1000 / 24  # m³/hr total solvent
         meoh_flow_mol = (
-            ((methanol_to_biomass * feed_parameters['flow'] * 1e3 * 0.9) / 1000) / 24
+            total_vol_hr * meoh_h2o / (meoh_h2o + 1)
             * chems['Methanol'].rho(phase='l', T=rcf_conditions['T'], P=rcf_conditions['P'])
             * (1 / chems['Methanol'].MW)
         )
-        fresh_solvent.imol['Methanol'] = meoh_flow_mol - recycle_solvent.imol['Methanol']
         water_flow_mol = (
-            (methanol_to_biomass * feed_parameters['flow'] * 1e3 * (1 / meoh_h2o) * 0.9) / 1000 / 24
+            total_vol_hr / (meoh_h2o + 1)
             * chems['Water'].rho(phase='l', T=rcf_conditions['T'], P=rcf_conditions['P'])
             * (1 / chems['Water'].MW)
         )
-        fresh_solvent.imol['Water'] = water_flow_mol - recycle_solvent.imol['Water']
+        fresh_solvent.imol['Methanol'] = meoh_flow_mol - recycle_solvent.imol['Methanol']
+        fresh_solvent.imol['Water']    = water_flow_mol - recycle_solvent.imol['Water']
         meoh_h2o_mix.outs[0].phases = ('s', 'l', 'g')  # needed by downstream reactors
 
     meoh_pump = bst.units.Pump('PUMP101', ins=meoh_h2o_mix-0, P=rcf_conditions['P'])
