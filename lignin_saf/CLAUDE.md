@@ -30,7 +30,7 @@ rcf_system = bst.System('RCF_System',
 | MIX100 | `meoh_h2o_mix` | Mixer | Mix fresh MeOH + MeOH recycle | — |
 | PUMP101 | `meoh_pump` | Pump | Pressurize MeOH | P = 60 bar |
 | HX102 | `meoh_heater` | HXutility | Heat MeOH | T = 200°C, rigorous VLE |
-| RCF103_S | `solvolysis_reactor` | `SolvolysisReactor` (custom) | Solvolysis: delignify biomass; produce pulp + liquor | T=200°C, P=60 bar, τ_s=3 hr (time on stream), τ_0=1 hr (cleaning), τ_res=20 min, void_frac=0.5, v=0.01 m/s, solvent_loading=5.45 L/kg, V_max_limit=600 m³ |
+| RCF103_S | `solvolysis_reactor` | `SolvolysisReactor` (custom) | Solvolysis: delignify biomass; produce pulp + liquor | T=200°C, P=60 bar, τ_s=3 hr, τ_0=1 hr, τ_res=1/3 hr, void_frac=0.5, solvent_loading=5.45 L/kg, V_max_limit=600 m³, LD_max=5.0 |
 | MIX104 | `h2_mixer` | Mixer | Mix fresh H₂ + H₂ recycle | — |
 | HX105 | `h2_pre_heat` | HXutility | Heat H₂ | T = 200°C, rigorous |
 | RCF106-H | `hydrogenolysis_reactor` | `HydrogenolysisReactor` (custom) | Hydrogenolyze lignin oil to C5–C15 monomers | T=200°C, P=60 bar, τ=1 hr, v=0.003 m/s, N_reactors=8 |
@@ -72,11 +72,10 @@ Recycle specs: fresh feed in each mixer is adjusted so that `fresh + recycle = r
 
 | Parameter | Value |
 |---|---|
-| Solvolysis T / P / τ | 200°C / 60 bar / 3 hr (time on stream) + 20 min hydraulic RT |
+| Solvolysis T / P / τ | 200°C / 60 bar / 3 hr (time on stream) + 1/3 hr hydraulic RT |
 | Hydrogenolysis T / P / τ | 200°C / 60 bar / 1 hr |
-| Per-pass solvent loading (`methanol_loading_per_pass`) | 5.45 L/kg dry biomass — drives reactor SIZING (N_total and V_max computed from this) |
-| Max vessel volume (`V_max_limit`) | 600 m³ — hard upper bound; N_total is the minimum number of reactors such that V_max ≤ this limit |
-| System-level MeOH loading (`methanol_to_biomass`) | 9 L/kg dry biomass — enforces total MeOH mass balance flow in `meoh_water_flow` spec; independent of reactor sizing |
+| Solvent loading (`methanol_loading_per_pass`) | 5.45 L/kg — system-level flow rate [L per kg daily biomass]; equals total solvent contact per batch via ideal stagger identity |
+| Max vessel volume (`V_max_limit`) | 600 m³ — hard upper bound enforced by k-multiplier scaling of N_total |
 | H₂:biomass ratio | 0.054 kg H₂/kg dry biomass |
 | NiC catalyst loading | 0.1 kg/kg dry biomass |
 | Lignin delignification | 70% → RCF oil |
@@ -84,6 +83,54 @@ Recycle specs: fresh feed in each mixer is adjusted so that `fresh + recycle = r
 | RCF oil composition | 50% monomers / 25% dimers / 25% oligomers |
 | Operating basis | 330 days/yr × 24 hr/day |
 | CEPCI basis | 541.7 (2016 USD) |
+
+## SolvolysisReactor Sizing Model
+
+`_size_bed()` in `ligsaf_units.py` uses a three-stage flow-rate-first approach:
+
+**Stage 1 — Ideal stagger formula:**
+```
+N_total_base = round(cycle_time / tau_0)                       # = 4 at base case
+N_working    = round(N_total_base × tau / cycle_time)          # = 3
+N_offline    = N_total_base − N_working                        # = 1
+batches/day  = 24 / tau_0  (independent of tau)
+```
+
+**Stage 2 — k-multiplier scaling to enforce V_max_limit:**
+```
+for k = 1, 2, 3, …:
+    N_total = k × N_total_base,  N_working = k × N_working_base
+    Q_per_reactor = Q_total / N_working
+    V_void        = void_frac × V_biomass          # interparticle voids (always saturated)
+    V_dynamic     = Q_per_reactor × tau_residence  # dynamic holdup (from experimental HRT)
+    V_solvent     = V_void + V_dynamic
+    V_max         = (V_solid + V_solvent) / (1 − free_frac)
+    accept if V_max ≤ V_max_limit
+```
+Stagger timing preserved exactly at each k.
+
+**Stage 3 — L/D enforcement:**
+If natural L/D > LD_max (default 5.0), superficial_velocity is reduced analytically:
+```
+A_new = (V_max × √π / (2 × LD_max))^(2/3)
+u_adj = Q_per_reactor / (A_new × 3600)
+```
+`self.superficial_velocity` is updated so pressure drop uses the adjusted value.
+
+**Base case results (5.45 L/kg, tau=3, tau_0=1, tau_res=1/3 hr):**
+
+| Quantity | Value |
+|---|---|
+| N_total / N_working | 4 / 3 |
+| Biomass per batch | 83,333 kg |
+| Q_total / Q_per_reactor | 454 / 151 m³/hr |
+| V_void + V_dynamic | 85.9 + 50.5 = 136.4 m³/bed |
+| V_max per vessel | ~247 m³ |
+| Total system volume | ~988 m³ |
+| D / L / L/D | 3.98 m / 19.9 m / 5.0 |
+| Effective u | 0.0034 m/s |
+
+**Key identity:** total solvent contact per batch = `solvent_loading` [L/kg] exactly (= 5.45 L/kg), matching the L/kg convention in RCF literature.
 
 ## Downstream Systems (outside rcf_system)
 

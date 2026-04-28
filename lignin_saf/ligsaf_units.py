@@ -123,13 +123,21 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
     # Default maximum vessel volume [m3]
     V_max_default: float = 600                    # Bartling paper considered reactor volume as 600 m3
 
-    # Per-pass solvent loading: L of methanol charged per kg dry biomass per batch.
-    # Used to compute N_total and V_max via the N_total search in _size_bed().
+    # System-level solvent loading: total solvent flow delivered to all working reactor
+    # beds per kg of daily biomass throughput [L/kg]. Fixes Q_total before the N_total
+    # search; each reactor receives Q_per_reactor = Q_total / N_working.
     solvent_loading_default: float = 5.45         # [L/kg dry biomass]
 
-    # Hard upper bound on vessel volume. _size_bed() finds the minimum N_total
-    # such that each computed V_max stays at or below this limit.
+    # Hard upper bound on individual vessel volume. _size_bed() scales N_total in
+    # integer multiples of the ideal-stagger base count until each vessel stays
+    # at or below this limit, preserving the stagger timing exactly.
     V_max_limit_default: float = 600              # [m³]
+
+    # Maximum allowable L/D ratio. Ideal packed-bed range is 3–5; hard limit is 10.
+    # If the geometry computed from superficial_velocity exceeds this, u is reduced
+    # analytically so that L/D = LD_max exactly. Pressure drop is recomputed at the
+    # adjusted u since self.superficial_velocity is updated when the cap triggers.
+    LD_max_default: float = 5.0
 
 
 
@@ -151,6 +159,7 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
             V_max: Optional[float] = None,
             solvent_loading: Optional[float] = None,
             V_max_limit: Optional[float] = None,
+            LD_max: Optional[float] = None,
             *,
             reaction_1,
             reaction_2
@@ -173,6 +182,7 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         self.V_max = self.V_max_default if V_max is None else V_max
         self.solvent_loading = self.solvent_loading_default if solvent_loading is None else solvent_loading
         self.V_max_limit     = self.V_max_limit_default     if V_max_limit     is None else V_max_limit
+        self.LD_max          = self.LD_max_default          if LD_max          is None else LD_max
         self.reaction_1 = reaction_1
         self.reaction_2 = reaction_2
         pump_1 = self.auxiliary('pump_1', bst.Pump, ins = self.ins[1])
@@ -186,56 +196,77 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
 
     def _size_bed(self):
 
-        #### Fixed bed configuration -- N_total derived from solvent_loading and V_max_limit ########
+        #### Fixed bed configuration -- N_total set by ideal staggering formula ########
 
         cycle_time        = self.tau + self.tau_0                  # [hr] e.g. 3 hr on-stream + 1 hr cleaning = 4 hr
         # ins[0] carries the Poplar group (dry biomass) + Water; BioSTEAM stores in kg/hr
         dry_biomass_kgday = self.ins[0].imass['Poplar'] * 24.0    # [kg/day]
 
-        # Find the minimum N_total such that each vessel volume stays at or below V_max_limit.
-        # N_working = N_total - 1: one bed is always offline for cleaning/unloading.
-        for N_total in range(2, 101):
-            N_working         = N_total - 1
+        # Q_total is fixed by solvent_loading and biomass throughput.
+        # solvent_loading [L/kg] is a system-level specific flow rate: total solvent volume
+        # delivered to all N_working reactors per kg of daily biomass throughput.
+        Q_total = (self.solvent_loading * dry_biomass_kgday) / 1000.0 / 24.0  # [m3/hr]
+
+        # Ideal stagger base: N_total_base = cycle_time / tau_0 reactors are the minimum
+        # for a perfectly staggered schedule (one cleaning slot always occupied).
+        # N_working_base = N_total_base × (tau / cycle_time) beds active at any instant.
+        # Clamped so at least 1 bed is always online and at least 1 is always cleaning.
+        N_total_base   = max(2, round(cycle_time / self.tau_0))
+        N_working_base = min(N_total_base - 1,
+                             max(1, round(N_total_base * self.tau / cycle_time)))
+
+        # Scale up by integer multiples k = 1, 2, 3, … until each vessel fits within
+        # V_max_limit. Scaling by k preserves the stagger ratio exactly:
+        #   N_total = k × N_total_base,  N_working = k × N_working_base,
+        #   N_offline = k × (N_total_base − N_working_base)
+        for k in range(1, 101):
+            N_total   = k * N_total_base
+            N_working = k * N_working_base
+
+            Q_per_reactor     = Q_total / N_working
             batches_per_day   = N_total * (24.0 / cycle_time)
             biomass_per_batch = dry_biomass_kgday / batches_per_day
             V_biomass         = biomass_per_batch / self.poplar_density
-            # Only solid wood [(1-void_frac)*V_biomass] excludes solvent;
-            # interparticle voids [void_frac*V_biomass] are also filled with solvent.
-            V_solid           = (1 - self.void_frac) * V_biomass
-            V_solvent_calc    = (self.solvent_loading * biomass_per_batch) / 1000.0  # L -> m3
-            # V_free = free_frac * V_max  =>  V_max = (V_solid + V_solvent) / (1 - free_frac)
-            V_max_candidate   = (V_solid + V_solvent_calc) / (1.0 - self.free_frac)
-            # Allow 0.5 m3 engineering tolerance to handle floating-point rounding.
+            V_solid           = (1 - self.void_frac) * V_biomass      # [m3] actual wood volume
+            # Total solvent: interparticle voids (always saturated) + dynamic holdup
+            V_void            = self.void_frac * V_biomass            # [m3] interparticle voids
+            V_solvent         = V_void + Q_per_reactor * self.tau_residence  # [m3]
+            # V_free = free_frac × V_max  =>  V_max = (V_solid + V_solvent) / (1 - free_frac)
+            V_max_candidate   = (V_solid + V_solvent) / (1.0 - self.free_frac)
             if V_max_candidate <= self.V_max_limit + 0.5:
                 break
         else:
             raise ValueError(
-                f"No feasible N_total <= 100 for solvent_loading={self.solvent_loading} L/kg "
-                f"and V_max_limit={self.V_max_limit} m3. Reduce feed rate or increase V_max_limit."
+                f"No feasible reactor count (tried up to k=100 × {N_total_base} = "
+                f"{100 * N_total_base} beds) for solvent_loading={self.solvent_loading} L/kg, "
+                f"tau_residence={self.tau_residence} hr, V_max_limit={self.V_max_limit} m³. "
+                f"Consider reducing solvent_loading or tau_residence."
             )
 
-        self.V_max = V_max_candidate
-        V_total    = N_total * self.V_max
-
-        #### Bed geometry ########
-
-        V_free    = self.free_frac * self.V_max                    # [m3] free headspace / gas disengagement
-        V_solvent = V_solvent_calc                                 # [m3] total solvent volume in bed
-
-        # Store for _design reporting
+        self.V_max      = V_max_candidate
+        V_total         = N_total * self.V_max
         self._V_biomass = V_biomass
         self._V_solvent = V_solvent
 
         #### Flow rate and reactor geometry ########
 
-        # Hydraulic RT is defined on the actual solvent volume (not total vessel volume)
-        # tau_residence = V_solvent / Q  =>  Q = V_solvent / tau_residence
-        Q_per_reactor = V_solvent / self.tau_residence             # [m3/hr]
-
         u  = self.superficial_velocity                             # [m/s]
-        self.area = A  = Q_per_reactor / (u * 3600)               # [m2] cross-sectional area
-        self.diameter = diameter = 2 * (A / np.pi) ** 0.5         # [m]
-        self.length   = length   = self.V_max / A                  # [m]
+        A  = Q_per_reactor / (u * 3600)                           # [m2] cross-sectional area
+        diameter = 2 * (A / np.pi) ** 0.5                         # [m]
+        length   = self.V_max / A                                  # [m]
+
+        # Enforce L/D ≤ LD_max by reducing u analytically.
+        # L/D = V_max × √π / (2 × A^(3/2))  →  A = (V_max × √π / (2 × LD_max))^(2/3)
+        if length / diameter > self.LD_max:
+            A        = (self.V_max * np.pi ** 0.5 / (2.0 * self.LD_max)) ** (2.0 / 3.0)
+            u        = Q_per_reactor / (A * 3600)
+            diameter = 2 * (A / np.pi) ** 0.5
+            length   = self.V_max / A
+            self.superficial_velocity = u   # update so pressure drop is consistent
+
+        self.area     = A
+        self.diameter = diameter
+        self.length   = length
 
         return length, diameter, N_total, N_working, V_total
 
