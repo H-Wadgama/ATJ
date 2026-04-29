@@ -33,7 +33,7 @@ rcf_system = bst.System('RCF_System',
 | RCF103_S | `solvolysis_reactor` | `SolvolysisReactor` (custom) | Solvolysis: delignify biomass; produce pulp + liquor | T=200°C, P=60 bar, τ_s=3 hr, τ_0=1 hr, τ_res=1/3 hr, void_frac=0.5, V_max_limit=600 m³, LD_max=5.0; solvent loading derived (~9.27 L/kg) |
 | MIX104 | `h2_mixer` | Mixer | Mix fresh H₂ + H₂ recycle | — |
 | HX105 | `h2_pre_heat` | HXutility | Heat H₂ | T = 200°C, rigorous |
-| RCF106-H | `hydrogenolysis_reactor` | `HydrogenolysisReactor` (custom) | Hydrogenolyze lignin oil to C5–C15 monomers | T=200°C, P=60 bar, τ=1 hr, v=0.003 m/s, N_reactors=8 |
+| RCF106_H | `hydrogenolysis_reactor` | `HydrogenolysisReactor` (custom) | Hydrogenolyze lignin oil to C5–C15 monomers; continuous fixed-bed | T=200°C, P=60 bar, τ_res=1/3 hr (20 min), void_frac=0.7, free_frac=0.20, V_max_limit=100 m³, LD∈[3,10]; N_reactors derived from sizing |
 | — | `R102` | (flash/separator step inside hydrogenolysis path) | Phase separation after reactor | — |
 | PUMP108 | `pre_psa_pump` | IsentropicCompressor | Compress vapor for PSA | P = 5 bar, vle=True |
 | FLASH109 | `pre_psa_flash` | Flash | Cool/condense before PSA | T = 260 K, P = 5 bar |
@@ -73,7 +73,7 @@ Recycle specs: fresh feed in each mixer is adjusted so that `fresh + recycle = r
 | Parameter | Value |
 |---|---|
 | Solvolysis T / P / τ | 200°C / 60 bar / 3 hr (time on stream) + 1/3 hr hydraulic RT |
-| Hydrogenolysis T / P / τ | 200°C / 60 bar / 1 hr |
+| Hydrogenolysis T / P / τ_res | 200°C / 60 bar / 20 min (1/3 hr hydraulic RT); continuous, catalyst on-stream indefinitely |
 | Solvent loading | ~9.27 L/kg — derived from bed geometry (Q = V_void / τ_res); reported as `design_results['Solvent loading']`; consistent with Bartling et al. 9 L/kg |
 | Max vessel volume (`V_max_limit`) | 600 m³ — hard upper bound enforced by k-multiplier scaling of N_total |
 | H₂:biomass ratio | 0.054 kg H₂/kg dry biomass |
@@ -131,6 +131,40 @@ u_adj = Q_per_reactor / (A_new × 3600)
 | Effective u (after L/D cap) | ~0.0069 m/s |
 
 **`compute_Q_total()` method:** Returns Q_total [m³/hr] from geometry without side effects. Called by the `meoh_water_flow` spec in `ligsaf_system.py` on every recycle iteration to set the methanol feed flow.
+
+## HydrogenolysisReactor Sizing Model
+
+`_size_bed()` in `ligsaf_units.py` uses a **continuous flow** approach. The catalyst is on-stream indefinitely; reactor volume is derived from the hydraulic residence time and total feed volumetric flow.
+
+**Volume accounting:**
+```
+Q_total          = ins[0].F_vol + ins[1].F_vol          # liquid solvent/lignin + H₂ gas [m³/hr]
+V_fluid          = Q_total × tau_residence               # fluid holdup in bed voids [m³]
+V_bed            = V_fluid / void_frac                   # packed bed volume (voids + catalyst) [m³]
+V_reactor_total  = V_bed / (1 − free_frac)               # add 20% free headspace above bed [m³]
+N_reactors       = ceil(V_reactor_total / V_max_limit)   # integer parallel vessels
+V_per_reactor    = V_reactor_total / N_reactors
+Q_per_reactor    = Q_total / N_reactors
+```
+
+**L/D enforcement — [LD_min, LD_max]:**
+Cross-section A and geometry are derived from `superficial_velocity`. If the natural L/D falls outside [3, 10], A is adjusted analytically to the nearest bound and `self.superficial_velocity` is updated:
+```
+A = (V_per_reactor × √π / (2 × LD_target))^(2/3)
+u = Q_per_reactor / (A × 3600)
+```
+
+**Default parameters:**
+
+| Parameter | Default | Meaning |
+|---|---|---|
+| `tau_residence` | 1/3 hr (20 min) | Hydraulic RT — determines V_fluid from Q |
+| `void_frac` | 0.7 | Catalyst bed void fraction (fluid-occupied fraction) |
+| `free_frac` | 0.20 | Free headspace as fraction of total reactor volume |
+| `V_max_limit` | 100 m³ | Hard upper bound per vessel; N_reactors scales up to satisfy |
+| `LD_min` / `LD_max` | 3.0 / 10.0 | L/D bounds; u adjusted analytically at either limit |
+
+**Design results reported:** `Reactor volume`, `Total volume`, `Residence time`, `Number of reactors`, `Diameter`, `Length`, `Duty`, `Catalyst loading cost`.
 
 ## Downstream Systems (outside rcf_system)
 

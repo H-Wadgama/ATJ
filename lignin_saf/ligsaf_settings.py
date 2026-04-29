@@ -15,7 +15,7 @@ rcf_conditions =  {
     'P'       : 60e5,              # [bar]
     'tau_s'   : 3,                 # [hr] Time on stream per solvolysis batch (3 hr total RCF, 1 hr cleaning → 4 hr cycle, 6 batches/reactor/day)
     'tau_s_res': 1/3,              # [hr] Hydraulic residence time of solvent in solvolysis bed (20 min)
-    'tau_h'   : 1,                 # [hr] Hydrogenolysis reaction residence time
+    'tau_h'   : 1/3,               # [hr] Hydrogenolysis reaction residence time
 }
 
 poplar_density = 485               # [kg/m³] Bulk density of poplar chips
