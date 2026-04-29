@@ -143,40 +143,42 @@ Cross-section A and diameter/length are derived from Q_per_reactor and superfici
 |---|---|---|
 | `V_max_limit` | 600 m³ | Hard upper bound per vessel; k-multiplier scales until satisfied. |
 | `tau_s` | 3 hr | Time on stream per batch (biomass contact time) |
-| `tau_s_res` | 1/3 hr (20 min) | Hydraulic residence time — sets Q via Q = V_void / tau_res |
-| `void_frac` | 0.5 | Interparticle void fraction; solvent fills these voids (V_solvent = V_void) |
+| `tau_s_res` | 1/3 hr (20 min) | Hydraulic residence time — sets Q via Q = V_solvent / tau_res |
+| `void_frac` | 0.5 | Interparticle void fraction; V_void = void_frac × V_biomass |
 | `poplar_density` | 485 kg/m³ | Bulk density of poplar chips |
-| `free_frac` | 0.10 | Fraction of reactor volume kept as headspace |
+| `free_frac` | 0.10 | Excess solvent fraction beyond interparticle voids; V_solvent = V_void × (1 + free_frac) |
 | `LD_max` | 5.0 | Max L/D ratio; u reduced analytically if exceeded |
 
 **Volume-first sizing (in `_size_bed()`):**
 ```
-V_void        = void_frac × V_biomass              # interparticle voids (= solvent volume)
-V_solvent     = V_void                             # solvent fills voids only; no dynamic term
-V_max         = (V_solid + V_solvent) / (1 − free_frac)  = V_biomass / (1 − free_frac)
-Q_per_reactor = V_solvent / tau_residence           # derived from geometry
-Q_total       = N_working × Q_per_reactor
-loading       = Q_total × 1000 × 24 / dry_biomass_kgday   # derived [L/kg], reported in design_results
+V_void            = void_frac × V_biomass                    # interparticle voids
+V_excess_solvent  = V_void × free_frac                       # excess solvent for mass transfer
+V_solvent         = V_void + V_excess_solvent                # = V_void × (1 + free_frac)
+V_max             = V_solid + V_solvent                      # = V_biomass × (1 + void_frac × free_frac)
+Q_per_reactor     = V_solvent / tau_residence                # derived from geometry
+Q_total           = N_working × Q_per_reactor
+loading           = Q_total × 1000 × 24 / dry_biomass_kgday # derived [L/kg], reported in design_results
 ```
 
-**`meoh_water_flow` spec** calls `solvolysis_reactor.compute_Q_total()` on every recycle iteration to set the methanol feed flow. `compute_Q_total()` is a side-effect-free method that replicates the geometry calculation without requiring a prior simulate.
+**`meoh_water_flow` spec** calls `solvolysis_reactor.compute_Q_total()` on every recycle iteration to set the methanol feed flow. `compute_Q_total()` is a side-effect-free method that replicates the geometry calculation (including the free_frac excess solvent term) without requiring a prior simulate.
 
-**Base case (tau=3, tau_0=1, tau_res=1/3 hr, void_frac=0.5):**
+**Base case (tau=3, tau_0=1, tau_res=1/3 hr, void_frac=0.5, free_frac=0.10):**
 
 | Quantity | Value |
 |---|---|
 | N_total / N_working / N_offline | 4 / 3 / 1 |
 | Biomass per batch | 83,333 kg |
-| V_void (= V_solvent) per bed | 85.9 m³ |
-| V_max per vessel | ~191 m³ |
-| Q_total / Q_per_reactor | 773 / 258 m³/hr |
-| Derived loading | ~9.27 L/kg (consistent with Bartling et al. 9 L/kg) |
-| D / L / L/D | 3.65 m / 18.25 m / 5.0 |
-| Effective u (after L/D cap) | 0.0069 m/s |
+| V_void per bed | 85.9 m³ |
+| V_solvent per bed | ~94.5 m³ |
+| V_max per vessel | ~180 m³ |
+| Q_total / Q_per_reactor | ~851 / 284 m³/hr |
+| Derived loading | ~10.2 L/kg |
+| D / L / L/D | 3.58 m / 17.9 m / 5.0 |
+| Effective u (after L/D cap) | ~0.0078 m/s |
 
 **batches/day = 24/tau_0** regardless of tau — a consequence of the ideal stagger formula. Changing tau_residence changes Q (and hence loading) but not vessel size or count.
 
-**Tests:** `lignin_saf/test_solvolysis_sizing.py` — pytest suite covering volume balance (V_solid + V_free + V_solvent = V_max), batch arithmetic, Q correctness (Q = V_solvent / tau_res), L/D cap, derived loading, and all design result keys. Run with:
+**Tests:** `lignin_saf/test_solvolysis_sizing.py` — pytest suite covering volume balance, batch arithmetic, Q correctness (Q = V_solvent / tau_res), L/D cap, derived loading, and all design result keys. Run with:
 ```bash
 pytest lignin_saf/test_solvolysis_sizing.py -v
 ```
