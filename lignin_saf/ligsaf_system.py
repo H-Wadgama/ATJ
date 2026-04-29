@@ -5,7 +5,7 @@ from lignin_saf.ligsaf_settings import (
     rcf_oil_yield, prices, feed_parameters, rcf_conditions,
     solvolysis_parameters, meoh_h2o, h2_biomass_ratio, RCF_catalyst,
     poplar_density, free_frac,
-    methanol_loading_per_pass, V_max_limit,
+    V_max_limit,
 )
 
 
@@ -56,10 +56,7 @@ def create_rcf_system(ins=None):
     hydrogen_recycle = bst.Stream('hydrogen_recycle', P=3e6, phase='g')
 
     # ── Co-feeds ──────────────────────────────────────────────────────────────
-    meoh_in = bst.Stream('Meoh_in',
-                         Methanol=methanol_loading_per_pass * feed_parameters['flow'] * 1e3 * meoh_h2o / (meoh_h2o + 1),
-                         Water=methanol_loading_per_pass * feed_parameters['flow'] * 1e3 / (meoh_h2o + 1),
-                         phase='l', units='L/d')
+    meoh_in = bst.Stream('Meoh_in', Methanol=0.0, Water=0.0, phase='l', units='L/d')
 
     hydrogen_in = bst.Stream('Hydrogen_In',
                              Hydrogen=h2_biomass_ratio * 2e6,
@@ -77,7 +74,7 @@ def create_rcf_system(ins=None):
     def meoh_water_flow():
         fresh_solvent = meoh_h2o_mix.ins[0]
         recycle_solvent = meoh_h2o_mix.ins[1]
-        total_vol_hr = (methanol_loading_per_pass * feed_parameters['flow'] * 1e3) / 1000 / 24  # m³/hr total solvent
+        total_vol_hr = solvolysis_reactor.compute_Q_total()  # m³/hr — derived from bed geometry
         meoh_flow_mol = (
             total_vol_hr * meoh_h2o / (meoh_h2o + 1)
             * chems['Methanol'].rho(phase='l', T=rcf_conditions['T'], P=rcf_conditions['P'])
@@ -126,7 +123,6 @@ def create_rcf_system(ins=None):
         superficial_velocity=0.01,
         poplar_density=poplar_density,             # 485 kg/m³ bulk density
         free_frac=free_frac,                       # 10% free headspace
-        solvent_loading=methanol_loading_per_pass, # L/kg per-pass charge — drives N_total and V_max
         V_max_limit=V_max_limit,                   # hard upper bound on vessel volume
         reaction_1=solvolysis_rxn,
         reaction_2=methanol_decomposition_rxn,

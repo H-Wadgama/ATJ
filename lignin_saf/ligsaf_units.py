@@ -78,7 +78,8 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
               'Total volume': 'm3',
               'Reactor volume': 'm3',
               'Biomass volume per bed': 'm3',
-              'Solvent volume per bed': 'm3'}
+              'Solvent volume per bed': 'm3',
+              'Solvent loading': 'L/kg'}
     
 
 
@@ -123,11 +124,6 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
     # Default maximum vessel volume [m3]
     V_max_default: float = 600                    # Bartling paper considered reactor volume as 600 m3
 
-    # System-level solvent loading: total solvent flow delivered to all working reactor
-    # beds per kg of daily biomass throughput [L/kg]. Fixes Q_total before the N_total
-    # search; each reactor receives Q_per_reactor = Q_total / N_working.
-    solvent_loading_default: float = 5.45         # [L/kg dry biomass]
-
     # Hard upper bound on individual vessel volume. _size_bed() scales N_total in
     # integer multiples of the ideal-stagger base count until each vessel stays
     # at or below this limit, preserving the stagger timing exactly.
@@ -157,7 +153,6 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
             free_frac: Optional[float] = None,
             poplar_diameter: Optional[float] = None,
             V_max: Optional[float] = None,
-            solvent_loading: Optional[float] = None,
             V_max_limit: Optional[float] = None,
             LD_max: Optional[float] = None,
             *,
@@ -180,7 +175,6 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         self.free_frac      = self.free_frac_default      if free_frac      is None else free_frac
         self.poplar_diameter = self.poplar_diameter_default if poplar_diameter is None else poplar_diameter
         self.V_max = self.V_max_default if V_max is None else V_max
-        self.solvent_loading = self.solvent_loading_default if solvent_loading is None else solvent_loading
         self.V_max_limit     = self.V_max_limit_default     if V_max_limit     is None else V_max_limit
         self.LD_max          = self.LD_max_default          if LD_max          is None else LD_max
         self.reaction_1 = reaction_1
@@ -194,6 +188,23 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
 
 
 
+    def compute_Q_total(self):
+        """Return Q_total [m³/hr] from bed geometry alone. No side effects. Callable before simulate()."""
+        dry_biomass_kgday = self.ins[0].imass['Poplar'] * 24.0
+        cycle_time = self.tau + self.tau_0
+        N_total_base = max(2, round(cycle_time / self.tau_0))
+        N_working_base = min(N_total_base - 1, max(1, round(N_total_base * self.tau / cycle_time)))
+        for k in range(1, 101):
+            N_total = k * N_total_base
+            N_working = k * N_working_base
+            batches_per_day = N_total * (24.0 / cycle_time)
+            biomass_per_batch = dry_biomass_kgday / batches_per_day
+            V_biomass = biomass_per_batch / self.poplar_density
+            if V_biomass / (1.0 - self.free_frac) <= self.V_max_limit + 0.5:
+                break
+        V_void = self.void_frac * V_biomass
+        return N_working * (V_void / self.tau_residence)
+
     def _size_bed(self):
 
         #### Fixed bed configuration -- N_total set by ideal staggering formula ########
@@ -201,11 +212,6 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         cycle_time        = self.tau + self.tau_0                  # [hr] e.g. 3 hr on-stream + 1 hr cleaning = 4 hr
         # ins[0] carries the Poplar group (dry biomass) + Water; BioSTEAM stores in kg/hr
         dry_biomass_kgday = self.ins[0].imass['Poplar'] * 24.0    # [kg/day]
-
-        # Q_total is fixed by solvent_loading and biomass throughput.
-        # solvent_loading [L/kg] is a system-level specific flow rate: total solvent volume
-        # delivered to all N_working reactors per kg of daily biomass throughput.
-        Q_total = (self.solvent_loading * dry_biomass_kgday) / 1000.0 / 24.0  # [m3/hr]
 
         # Ideal stagger base: N_total_base = cycle_time / tau_0 reactors are the minimum
         # for a perfectly staggered schedule (one cleaning slot always occupied).
@@ -216,34 +222,38 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
                              max(1, round(N_total_base * self.tau / cycle_time)))
 
         # Scale up by integer multiples k = 1, 2, 3, … until each vessel fits within
-        # V_max_limit. Scaling by k preserves the stagger ratio exactly:
+        # V_max_limit. Scaling by k reduces biomass_per_batch (more, smaller batches),
+        # which shrinks V_biomass and thus V_max.
         #   N_total = k × N_total_base,  N_working = k × N_working_base,
         #   N_offline = k × (N_total_base − N_working_base)
         for k in range(1, 101):
             N_total   = k * N_total_base
             N_working = k * N_working_base
 
-            Q_per_reactor     = Q_total / N_working
             batches_per_day   = N_total * (24.0 / cycle_time)
             biomass_per_batch = dry_biomass_kgday / batches_per_day
             V_biomass         = biomass_per_batch / self.poplar_density
             V_solid           = (1 - self.void_frac) * V_biomass      # [m3] actual wood volume
-            # Total solvent: interparticle voids (always saturated) + dynamic holdup
-            V_void            = self.void_frac * V_biomass            # [m3] interparticle voids
-            V_solvent         = V_void + Q_per_reactor * self.tau_residence  # [m3]
+            V_void            = self.void_frac * V_biomass            # [m3] interparticle voids (filled with solvent)
+            V_solvent         = V_void                                 # solvent occupies the interparticle void only
             # V_free = free_frac × V_max  =>  V_max = (V_solid + V_solvent) / (1 - free_frac)
-            V_max_candidate   = (V_solid + V_solvent) / (1.0 - self.free_frac)
+            V_max_candidate   = (V_solid + V_solvent) / (1.0 - self.free_frac)  # = V_biomass / (1 - free_frac)
+            # Q is derived from residence time and void volume; not an input
+            Q_per_reactor     = V_solvent / self.tau_residence        # [m3/hr]
+            Q_total           = N_working * Q_per_reactor
             if V_max_candidate <= self.V_max_limit + 0.5:
                 break
         else:
             raise ValueError(
                 f"No feasible reactor count (tried up to k=100 × {N_total_base} = "
-                f"{100 * N_total_base} beds) for solvent_loading={self.solvent_loading} L/kg, "
+                f"{100 * N_total_base} beds) for void_frac={self.void_frac}, "
                 f"tau_residence={self.tau_residence} hr, V_max_limit={self.V_max_limit} m³. "
-                f"Consider reducing solvent_loading or tau_residence."
+                f"Consider reducing void_frac or tau_residence, or increasing V_max_limit."
             )
 
         self.V_max      = V_max_candidate
+        self.Q_total    = Q_total                                     # [m3/hr] — used by meoh_water_flow spec
+        self._loading   = Q_total * 1000.0 * 24.0 / dry_biomass_kgday  # [L/kg] derived loading for reporting
         V_total         = N_total * self.V_max
         self._V_biomass = V_biomass
         self._V_solvent = V_solvent
@@ -378,6 +388,7 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         self.set_design_result('Batch time', 'hr', cycle_time)
         self.set_design_result('Biomass volume per bed', 'm3', self._V_biomass)
         self.set_design_result('Solvent volume per bed', 'm3', self._V_solvent)
+        self.set_design_result('Solvent loading', 'L/kg', self._loading)
 
         
         
