@@ -16,11 +16,10 @@ from lignin_saf.ligsaf_settings import solvolysis_parameters
 class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
 
     """
-    Plug flow reactor for solvolysis reaction, where a solvent is used to solubilize lignin present
+    Plug flow reactor for solvolysis reaction, where a solvent is used to extract lignin present
     in plant cell wall
 
-    In reality, lignin will also be partially depolymerized, but this phenomena is not captured in 
-    current design but may be included in a future implementation
+    Residence time low enough for the unstable extracted intermediates to be stablized in the downstream hydrogenolysis step
     Design based off [1],[2]. Pressure drop calculations from [3]
 
     By default,  current design supports multiples of 3 identical biomass beds, with 2x operational beds at any given time, 
@@ -79,6 +78,7 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
               'Reactor volume': 'm3',
               'Biomass volume per bed': 'm3',
               'Solvent volume per bed': 'm3',
+              'Instantaneous loading': 'L/kg',
               'Solvent loading': 'L/kg'}
     
 
@@ -200,10 +200,12 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
             batches_per_day = N_total * (24.0 / cycle_time)
             biomass_per_batch = dry_biomass_kgday / batches_per_day
             V_biomass = biomass_per_batch / self.poplar_density
-            if V_biomass / (1.0 - self.free_frac) <= self.V_max_limit + 0.5:
+            V_void = self.void_frac * V_biomass
+            V_solvent = V_void * (1.0 + self.free_frac)
+            V_max_candidate = (1.0 - self.void_frac) * V_biomass + V_solvent
+            if V_max_candidate <= self.V_max_limit + 0.5:
                 break
-        V_void = self.void_frac * V_biomass
-        return N_working * (V_void / self.tau_residence)
+        return N_working * (V_solvent / self.tau_residence)
 
     def _size_bed(self):
 
@@ -233,11 +235,12 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
             batches_per_day   = N_total * (24.0 / cycle_time)
             biomass_per_batch = dry_biomass_kgday / batches_per_day
             V_biomass         = biomass_per_batch / self.poplar_density
-            V_solid           = (1 - self.void_frac) * V_biomass      # [m3] actual wood volume
-            V_void            = self.void_frac * V_biomass            # [m3] interparticle voids (filled with solvent)
-            V_solvent         = V_void                                 # solvent occupies the interparticle void only
-            # V_free = free_frac × V_max  =>  V_max = (V_solid + V_solvent) / (1 - free_frac)
-            V_max_candidate   = (V_solid + V_solvent) / (1.0 - self.free_frac)  # = V_biomass / (1 - free_frac)
+            V_solid           = (1 - self.void_frac) * V_biomass       # [m3] actual wood volume
+            V_void            = (self.void_frac * V_biomass)           # [m3] interparticle voids (filled with solvent)
+            V_excess_solvent  = V_void*(self.free_frac)                # [m3] Excess solvent to satisfy mass transfer considerations
+            V_solvent         = V_void + V_excess_solvent              # solvent occupies the interparticle void and some excess
+            
+            V_max_candidate   = (V_solid + V_solvent)  # = V_biomass / (1 - free_frac)
             # Q is derived from residence time and void volume; not an input
             Q_per_reactor     = V_solvent / self.tau_residence        # [m3/hr]
             Q_total           = N_working * Q_per_reactor
@@ -257,6 +260,7 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         V_total         = N_total * self.V_max
         self._V_biomass = V_biomass
         self._V_solvent = V_solvent
+        self._instantaneous_loading = (V_solvent*1000)/biomass_per_batch
 
         #### Flow rate and reactor geometry ########
 
@@ -388,6 +392,7 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         self.set_design_result('Batch time', 'hr', cycle_time)
         self.set_design_result('Biomass volume per bed', 'm3', self._V_biomass)
         self.set_design_result('Solvent volume per bed', 'm3', self._V_solvent)
+        self.set_design_result('Instantaneous loading', 'L/kg', self._instantaneous_loading)
         self.set_design_result('Solvent loading', 'L/kg', self._loading)
 
         
