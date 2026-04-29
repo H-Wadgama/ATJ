@@ -119,20 +119,20 @@ Two-reactor RCF process: **poplar → solvolysis + hydrogenolysis → lignin oil
   ```
   Note: `chems.define_group('Poplar', ...)` must be called before creating any stream with `Poplar` as a component — do this in the calling script after `bst.settings.set_thermo(chems)`, before passing `ins` to the factory.
 
-**`SolvolysisReactor` sizing model (flow-rate-first, semi-batch, ideal stagger):**
+**`SolvolysisReactor` sizing model (volume-first, semi-batch, ideal stagger):**
 
-Reactor sizing in `_size_bed()` (`ligsaf_units.py`) follows a three-stage logic:
+Reactor sizing in `_size_bed()` (`ligsaf_units.py`) follows a three-stage logic. Bed geometry fully determines the solvent volume; Q and loading are derived outputs, not inputs.
 
 **Stage 1 — N_total from ideal stagger formula:**
 ```
-N_total_base = round(cycle_time / tau_0)          # e.g. round(4/1) = 4
+N_total_base = round(cycle_time / tau_0)            # e.g. round(4/1) = 4
 N_working    = round(N_total_base × tau/cycle_time) # e.g. round(4 × 3/4) = 3
 N_offline    = N_total_base − N_working             # e.g. 1
 ```
 This ensures exactly N_offline beds are always in their cleaning window (τ₀) — the ideal stagger condition. At least 1 cleaning slot and 1 active slot are guaranteed.
 
 **Stage 2 — V_max_limit enforcement by k-multiplier scaling:**
-If the base count gives vessel volumes above V_max_limit (600 m³), N_total is scaled by integer k = 1, 2, 3, … until V_max ≤ V_max_limit. Stagger timing is preserved exactly because N_total = k × N_total_base and N_working = k × N_working_base.
+If the base count gives vessel volumes above V_max_limit (600 m³), N_total is scaled by integer k = 1, 2, 3, … until V_max ≤ V_max_limit. Increasing k raises batches_per_day, which reduces biomass_per_batch and hence V_biomass and V_max. Stagger timing is preserved exactly because N_total = k × N_total_base and N_working = k × N_working_base.
 
 **Stage 3 — Geometry with L/D cap:**
 Cross-section A and diameter/length are derived from Q_per_reactor and superficial_velocity. If L/D > LD_max (default 5.0), superficial velocity is reduced analytically to hit L/D = LD_max exactly. `self.superficial_velocity` is updated so pressure drop uses the adjusted value.
@@ -141,52 +141,42 @@ Cross-section A and diameter/length are derived from Q_per_reactor and superfici
 
 | Parameter | Default | Meaning |
 |---|---|---|
-| `methanol_loading_per_pass` | 5.45 L/kg | System-level solvent flow rate [L per kg daily biomass]. Sets Q_total; also equals total solvent contact per batch (L/kg) via ideal stagger identity. |
 | `V_max_limit` | 600 m³ | Hard upper bound per vessel; k-multiplier scales until satisfied. |
 | `tau_s` | 3 hr | Time on stream per batch (biomass contact time) |
-| `tau_s_res` | 1/3 hr (20 min) | Hydraulic residence time — experimentally derived, independent of void_frac/Q |
+| `tau_s_res` | 1/3 hr (20 min) | Hydraulic residence time — sets Q via Q = V_void / tau_res |
+| `void_frac` | 0.5 | Interparticle void fraction; solvent fills these voids (V_solvent = V_void) |
 | `poplar_density` | 485 kg/m³ | Bulk density of poplar chips |
 | `free_frac` | 0.10 | Fraction of reactor volume kept as headspace |
 | `LD_max` | 5.0 | Max L/D ratio; u reduced analytically if exceeded |
 
-**V_solvent has two contributions (both in `_size_bed()`):**
+**Volume-first sizing (in `_size_bed()`):**
 ```
-V_void    = void_frac × V_biomass              # interparticle voids, always saturated
-V_dynamic = Q_per_reactor × tau_residence       # dynamic holdup from experimental HRT
-V_solvent = V_void + V_dynamic
-V_max     = (V_solid + V_solvent) / (1 − free_frac)
+V_void        = void_frac × V_biomass              # interparticle voids (= solvent volume)
+V_solvent     = V_void                             # solvent fills voids only; no dynamic term
+V_max         = (V_solid + V_solvent) / (1 − free_frac)  = V_biomass / (1 − free_frac)
+Q_per_reactor = V_solvent / tau_residence           # derived from geometry
+Q_total       = N_working × Q_per_reactor
+loading       = Q_total × 1000 × 24 / dry_biomass_kgday   # derived [L/kg], reported in design_results
 ```
 
-**Q_total and flow rate:**
-```
-Q_total       = methanol_loading_per_pass × dry_biomass_kgday / 1000 / 24  [m³/hr]
-Q_per_reactor = Q_total / N_working
-```
-`Q_total` is identical to `total_vol_hr` in the `meoh_water_flow` spec (`ligsaf_system.py:80`) — both parameters use the same flow-rate interpretation of `methanol_loading_per_pass`.
+**`meoh_water_flow` spec** calls `solvolysis_reactor.compute_Q_total()` on every recycle iteration to set the methanol feed flow. `compute_Q_total()` is a side-effect-free method that replicates the geometry calculation without requiring a prior simulate.
 
-**Useful identity:** With ideal stagger, total solvent contact per batch = Q_per_reactor × τ / biomass_per_batch = `methanol_loading_per_pass` [L/kg] exactly. This matches the L/kg convention in RCF literature (Bartling et al. 9 L/kg).
-
-**Base case (5.45 L/kg, tau=3, tau_0=1, tau_res=1/3 hr):**
+**Base case (tau=3, tau_0=1, tau_res=1/3 hr, void_frac=0.5):**
 
 | Quantity | Value |
 |---|---|
 | N_total / N_working / N_offline | 4 / 3 / 1 |
 | Biomass per batch | 83,333 kg |
-| V_max per vessel | ~247 m³ (well under 600 m³ limit) |
-| Total system volume | ~988 m³ |
-| Q_total / Q_per_reactor | 454 / 151 m³/hr |
-| V_void + V_dynamic | 85.9 + 50.5 = 136.4 m³/bed |
-| D / L / L/D | 3.98 m / 19.9 m / 5.0 |
-| Effective u (after L/D cap) | 0.0034 m/s (reduced from 0.01 m/s) |
+| V_void (= V_solvent) per bed | 85.9 m³ |
+| V_max per vessel | ~191 m³ |
+| Q_total / Q_per_reactor | 773 / 258 m³/hr |
+| Derived loading | ~9.27 L/kg (consistent with Bartling et al. 9 L/kg) |
+| D / L / L/D | 3.65 m / 18.25 m / 5.0 |
+| Effective u (after L/D cap) | 0.0069 m/s |
 
-**batches/day = 24/tau_0** regardless of tau — a consequence of the ideal stagger formula. So changing tau only changes N_total/N_working, not the number of batches.
+**batches/day = 24/tau_0** regardless of tau — a consequence of the ideal stagger formula. Changing tau_residence changes Q (and hence loading) but not vessel size or count.
 
-**Tests:** `lignin_saf/test_solvolysis_sizing.py` — pytest suite covering volume balance, batch arithmetic, Q correctness (dynamic term recovers Q: Q = (V_solvent − V_void) / tau_res), L/D cap, and all design result keys. Run with:
-```bash
-pytest lignin_saf/test_solvolysis_sizing.py -v
-```
-
-**Tests:** `lignin_saf/test_solvolysis_sizing.py` — pytest suite covering volume balance (V_solid + V_free + V_solvent = V_max), batch arithmetic, Q correctness (V_solvent not V_max), L/D bounds, and all design result keys. Run with:
+**Tests:** `lignin_saf/test_solvolysis_sizing.py` — pytest suite covering volume balance (V_solid + V_free + V_solvent = V_max), batch arithmetic, Q correctness (Q = V_solvent / tau_res), L/D cap, derived loading, and all design result keys. Run with:
 ```bash
 pytest lignin_saf/test_solvolysis_sizing.py -v
 ```

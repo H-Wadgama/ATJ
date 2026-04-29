@@ -28,13 +28,6 @@ methanol_to_biomass = 9            # [L/kg] from https://doi.org/10.1016/j.copbi
                                    # Surprisingly, Bartling et al assumes a 9L/kg for a flow through
                                    # configuration which is very less.
 
-# System-level solvent loading: total volumetric flow of solvent delivered to all working
-# reactor beds, per kg of daily dry biomass throughput [L/kg].
-# Interpreted as: Q_total [m³/hr] = methanol_loading_per_pass × feed [kg/day] / 1000 / 24.
-# Drives reactor SIZING (N_total and V_max in _size_bed()) and the MeOH mass balance
-# (meoh_water_flow spec in ligsaf_system.py) — both use this same flow-rate interpretation.
-methanol_loading_per_pass = 5.45   # [L/kg dry biomass]
-
 # Maximum allowable volume per reactor vessel. N_total is the minimum number of reactors
 # such that each vessel stays at or below this limit.
 V_max_limit = 600                  # [m³]

@@ -8,10 +8,11 @@ These tests verify:
   1. Volume balance: V_solid + V_free + V_solvent = V_max
      (V_solid = (1-void_frac)*V_biomass; interparticle voids are filled with solvent)
   2. Batch arithmetic: batches/day × biomass/batch = daily feed
-  3. Q calculation: Q = V_solvent / tau_residence  (NOT V_max / tau_residence)
+  3. Q calculation: Q = V_solvent / tau_residence  (solvent = void volume only)
   4. Total system flow: Q_total = N_working × Q_per_reactor
   5. Reactor geometry: diameter and length from superficial velocity
   6. Design results populated correctly after simulate()
+  7. Derived loading ≈ 9.27 L/kg (volume-first, consistent with Bartling et al.)
 """
 
 import pytest
@@ -31,16 +32,18 @@ from lignin_saf.ligsaf_settings import (
 def sizing_params():
     """Reference values computed from first principles for 2000 DMT/day feed.
 
+    Volume-first approach: bed geometry (V_void = void_frac × V_biomass) drives Q.
+    Q = V_void / tau_res; loading [L/kg] is a derived output, not an input.
+
     Uses the ideal staggering formula from SolvolysisReactor._size_bed():
     N_total = cycle_time / tau_0; N_working = N_total × (tau / cycle_time).
     At tau=3, tau_0=1: N_total=4, N_working=3, N_offline=1.
     """
-    solvent_loading = 5.45      # L/kg dry biomass (system-level flow rate)
-    V_max_limit_    = 600       # m³ reference upper bound (warning threshold only)
+    V_max_limit_    = 600       # m³ reference upper bound
     tau_s        = 3            # hr  time on stream
     tau_0        = 1            # hr  cleaning
     tau_res      = 1 / 3       # hr  hydraulic RT (20 min)
-    u            = 0.01         # m/s superficial velocity
+    u            = 0.01         # m/s superficial velocity (initial; may be reduced by L/D cap)
     rho_poplar   = 485          # kg/m³ bulk density
     void_frac_   = 0.5          # interparticle void fraction
     free_frac_   = 0.10
@@ -48,24 +51,24 @@ def sizing_params():
     cycle_time    = tau_s + tau_0                                # 4 hr
     feed_kgday    = feed_parameters['flow'] * 1e3               # 2,000,000 kg/day
 
-    Q_total = (solvent_loading * feed_kgday) / 1000.0 / 24.0   # m³/hr  (fixed)
-
     # Ideal stagger base
     N_total_base   = max(2, round(cycle_time / tau_0))
     N_working_base = min(N_total_base - 1, max(1, round(N_total_base * tau_s / cycle_time)))
 
-    # Scale up by k until each vessel fits within V_max_limit
+    # Scale up by k until each vessel fits within V_max_limit.
+    # k reduces V_max by splitting the daily feed into more, smaller batches.
     for k in range(1, 101):
         N_total   = k * N_total_base
         N_working = k * N_working_base
-        Q_per_reactor     = Q_total / N_working
         batches_per_day   = N_total * (24 / cycle_time)
         biomass_per_batch = feed_kgday / batches_per_day
         V_biomass         = biomass_per_batch / rho_poplar
         V_solid           = (1 - void_frac_) * V_biomass
         V_void            = void_frac_ * V_biomass
-        V_solvent         = V_void + Q_per_reactor * tau_res
-        V_max             = (V_solid + V_solvent) / (1.0 - free_frac_)
+        V_solvent         = V_void                              # solvent = void volume only
+        V_max             = (V_solid + V_solvent) / (1.0 - free_frac_)  # = V_biomass / (1 - free_frac)
+        Q_per_reactor     = V_solvent / tau_res                 # derived from geometry
+        Q_total           = N_working * Q_per_reactor
         if V_max <= V_max_limit_:
             break
 
@@ -83,8 +86,10 @@ def sizing_params():
         diameter = 2 * (A / math.pi) ** 0.5
         length   = V_max / A
 
+    loading = Q_total * 1000.0 * 24.0 / feed_kgday             # derived [L/kg]
+
     return dict(
-        solvent_loading=solvent_loading, V_max_limit=V_max_limit_,
+        V_max_limit=V_max_limit_,
         V_max=V_max, tau_s=tau_s, tau_0=tau_0, tau_res=tau_res,
         N_total=N_total, N_working=N_working, u=u,
         rho_poplar=rho_poplar, void_frac=void_frac_, free_frac=free_frac_,
@@ -92,7 +97,7 @@ def sizing_params():
         cycle_time=cycle_time, batches_per_day=batches_per_day,
         feed_kgday=feed_kgday, biomass_per_batch=biomass_per_batch,
         V_biomass=V_biomass, V_free=V_free, V_solvent=V_solvent, V_void=V_void,
-        Q_per_reactor=Q_per_reactor, Q_total=Q_total,
+        Q_per_reactor=Q_per_reactor, Q_total=Q_total, loading=loading,
         A=A, diameter=diameter, length=length,
     )
 
@@ -133,7 +138,7 @@ class TestSizingMath:
         assert p['V_solid'] == pytest.approx((1 - p['void_frac']) * p['V_biomass'], rel=1e-9)
 
     def test_V_free(self, sizing_params):
-        """10% of 247.0 m³ ≈ 24.7 m³ (V_solvent now includes void space + dynamic holdup)."""
+        """10% of V_max is kept as headspace."""
         p = sizing_params
         assert p['V_free'] == pytest.approx(p['free_frac'] * p['V_max'], rel=1e-9)
 
@@ -141,38 +146,32 @@ class TestSizingMath:
         """Solvent volume must be positive — solid biomass + headspace must fit."""
         assert sizing_params['V_solvent'] > 0
 
-    def test_V_solvent_includes_interparticle_void(self, sizing_params):
+    def test_V_solvent_equals_V_void(self, sizing_params):
         """
-        V_solvent = V_void + Q_per_reactor × tau_res  (two explicit contributions).
-        V_void = void_frac × V_biomass ≈ 85.9 m³ (interparticle space, always saturated).
-        Q × tau_res ≈ 50.5 m³ (dynamic holdup from experimentally-measured RT).
-        Total V_solvent ≈ 136.4 m³; volume balance V_solid + V_free + V_solvent = V_max holds.
+        V_solvent = V_void = void_frac × V_biomass (solvent fills interparticle voids only).
+        No dynamic holdup term — Q is derived from geometry, not the other way around.
         """
         p = sizing_params
-        expected = p['V_max'] - p['V_solid'] - p['V_free']
-        assert p['V_solvent'] == pytest.approx(expected, rel=1e-9)
-        # V_solvent now explicitly includes the void term, so it must exceed V_void alone
-        assert p['V_solvent'] > p['V_void']
+        assert p['V_solvent'] == pytest.approx(p['V_void'], rel=1e-9)
 
-    def test_Q_uses_V_solvent_not_V_max(self, sizing_params):
+    def test_Q_derived_from_void_volume(self, sizing_params):
         """
-        Q_per_reactor = (V_solvent - V_void) / tau_residence, NOT V_max / tau_residence.
-        V_solvent now includes V_void explicitly; the dynamic term alone recovers Q.
-        V_max / tau_res would give ~741 m³/hr (wrong).
+        Q_per_reactor = V_solvent / tau_residence = V_void / tau_res.
+        V_max / tau_res would be wrong (larger than Q).
         """
         p = sizing_params
-        Q_from_dynamic = (p['V_solvent'] - p['V_void']) / p['tau_res']
-        Q_wrong        = p['V_max'] / p['tau_res']
+        Q_from_void = p['V_solvent'] / p['tau_res']
+        Q_wrong     = p['V_max'] / p['tau_res']
 
-        assert p['Q_per_reactor'] == pytest.approx(Q_from_dynamic, rel=1e-6)
+        assert p['Q_per_reactor'] == pytest.approx(Q_from_void, rel=1e-6)
         assert p['Q_per_reactor'] != pytest.approx(Q_wrong, rel=1e-3), (
-            "Q_per_reactor is using V_max instead of the dynamic holdup"
+            "Q_per_reactor is using V_max instead of V_solvent (= V_void)"
         )
 
     def test_Q_per_reactor_approx(self, sizing_params):
-        """Q = (V_solvent - V_void) / tau_residence (dynamic term only recovers Q)."""
+        """Q = V_solvent / tau_residence (void volume drives flow rate)."""
         p = sizing_params
-        assert p['Q_per_reactor'] == pytest.approx((p['V_solvent'] - p['V_void']) / p['tau_res'], rel=1e-6)
+        assert p['Q_per_reactor'] == pytest.approx(p['V_solvent'] / p['tau_res'], rel=1e-6)
 
     def test_total_flow_three_reactors(self, sizing_params):
         """Total Q = N_working × Q_per_reactor."""
@@ -188,7 +187,7 @@ class TestSizingMath:
     def test_LD_ratio_reasonable(self, sizing_params):
         """
         L/D is capped at LD_max=5 (upper end of ideal 3–5 range).
-        Natural L/D (without cap) would be ~25.4; after analytical u reduction it is exactly 5.
+        Natural L/D (without cap) would be > 5; after analytical u reduction it is exactly 5.
         """
         p = sizing_params
         LD = p['length'] / p['diameter']
@@ -199,6 +198,13 @@ class TestSizingMath:
         p = sizing_params
         recovered = p['batches_per_day'] * p['biomass_per_batch']
         assert recovered == pytest.approx(p['feed_kgday'], rel=1e-6)
+
+    def test_derived_loading(self, sizing_params):
+        """Derived loading ≈ 9.27 L/kg — consistent with Bartling et al. 9 L/kg literature value."""
+        p = sizing_params
+        assert p['loading'] == pytest.approx(9.27, abs=0.1), (
+            f"Derived loading = {p['loading']:.2f} L/kg; expected ≈9.27 L/kg"
+        )
 
 
 # ── Integration tests (require BioSTEAM + lignin_saf package) ──────────────
@@ -260,7 +266,6 @@ def simulated_reactor():
         superficial_velocity=0.01,
         poplar_density=poplar_density,
         free_frac=free_frac,
-        solvent_loading=5.45,
         reaction_1=solvolysis_rxn,
         reaction_2=meoh_decomp,
     )
@@ -279,8 +284,8 @@ class TestDesignResults:
         assert simulated_reactor.design_results['Beds in service'] == 3
 
     def test_reactor_volume(self, simulated_reactor):
-        # V_max = (V_solid + V_void + Q×tau_res) / 0.9 = (85.9 + 85.9 + 50.5) / 0.9 ≈ 247.0 m³
-        assert simulated_reactor.design_results['Reactor volume'] == pytest.approx(247.0, abs=1.0)
+        # V_max = V_biomass / (1 - free_frac) = 171.8 / 0.9 ≈ 190.9 m³
+        assert simulated_reactor.design_results['Reactor volume'] == pytest.approx(190.9, abs=1.0)
 
     def test_time_on_stream(self, simulated_reactor):
         assert simulated_reactor.design_results['Time on stream'] == pytest.approx(3.0)
@@ -301,10 +306,10 @@ class TestDesignResults:
         assert V_bm == pytest.approx(171.8, abs=1.0)
 
     def test_V_solvent_approx(self, simulated_reactor):
-        """Solvent volume per bed = V_void + Q×tau_res for N_total=4, N_working=3."""
+        """Solvent volume per bed = V_void = void_frac × V_biomass ≈ 85.9 m³."""
         V_sol = simulated_reactor.design_results['Solvent volume per bed']
-        # V_void=85.9 m³ + Q×tau_res=50.5 m³ → 136.4 m³
-        assert V_sol == pytest.approx(136.4, abs=1.0)
+        # V_void = 0.5 × 171.8 = 85.9 m³ (no dynamic holdup)
+        assert V_sol == pytest.approx(85.9, abs=1.0)
 
     def test_volume_balance_in_results(self, simulated_reactor):
         """V_solid + V_free + V_solvent == V_max (solid = (1-void_frac)*V_biomass)."""
@@ -315,10 +320,10 @@ class TestDesignResults:
         total    = V_solid + free_frac * V_max_actual + dr['Solvent volume per bed']
         assert total == pytest.approx(V_max_actual, abs=0.5)
 
-    def test_Q_based_on_V_solvent(self, simulated_reactor):
+    def test_Q_based_on_void_volume(self, simulated_reactor):
         """
-        Verify Q implied by geometry = (V_solvent - V_void) / tau_res.
-        V_solvent now includes the interparticle void term; Q is recovered via the dynamic part only.
+        Verify Q implied by geometry = V_solvent / tau_res.
+        V_solvent = V_void (no dynamic holdup); Q is fully determined by bed geometry.
         """
         dr    = simulated_reactor.design_results
         u     = simulated_reactor.superficial_velocity
@@ -327,14 +332,12 @@ class TestDesignResults:
         Q_implied = A * u * 3600                                  # m³/hr
 
         V_sol    = dr['Solvent volume per bed']
-        V_biomass = dr['Biomass volume per bed']
-        V_void   = simulated_reactor.void_frac * V_biomass
         tau_res  = simulated_reactor.tau_residence
-        Q_expected = (V_sol - V_void) / tau_res
+        Q_expected = V_sol / tau_res                              # Q = V_void / tau_res
 
         assert Q_implied == pytest.approx(Q_expected, rel=1e-3), (
             f"Q implied by geometry ({Q_implied:.1f} m³/hr) does not match "
-            f"(V_solvent-V_void)/tau_res ({Q_expected:.1f} m³/hr)"
+            f"V_solvent/tau_res ({Q_expected:.1f} m³/hr)"
         )
 
     def test_LD_ratio(self, simulated_reactor):
@@ -346,3 +349,10 @@ class TestDesignResults:
         dr   = simulated_reactor.design_results
         LD   = dr['Length'] / dr['Diameter']   # both in ft, ratio same
         assert LD == pytest.approx(5.0, rel=0.01), f"L/D = {LD:.2f} should be ≈5 after cap"
+
+    def test_derived_loading(self, simulated_reactor):
+        """Derived solvent loading ≈ 9.27 L/kg (volume-first; consistent with Bartling 9 L/kg)."""
+        loading = simulated_reactor.design_results['Solvent loading']
+        assert loading == pytest.approx(9.27, abs=0.1), (
+            f"Derived loading = {loading:.2f} L/kg; expected ≈9.27 L/kg"
+        )
