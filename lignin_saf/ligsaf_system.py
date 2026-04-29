@@ -163,12 +163,10 @@ def create_rcf_system(ins=None):
     hydrogenolysis_reactor = HydrogenolysisReactor(
         'RCF106_H',
         ins=(solvolysis_reactor.outs[1], h2_pre_heat-0),
-        tau=rcf_conditions['tau_h'],
         P=rcf_conditions['P'],
         T=rcf_conditions['T'],
         superficial_velocity=0.003,
         reaction=hydrogenolysis,
-        N_reactors=8,
     )
 
     R102 = bst.units.Flash('FLASH107', ins=hydrogenolysis_reactor-0, T=320, P=5e5)

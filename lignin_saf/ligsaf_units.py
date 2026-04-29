@@ -474,97 +474,128 @@ class HydrogenolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
     _N_outs = 1
     
     _units = {**PressureVessel._units,
-              # 'Pressure drop': 'bar',
               'Duty': 'kJ/hr',
               'Residence time': 'hr',
               'Reactor volume': 'm3',
               'Total volume': 'm3',
+              'Number of reactors': '',
               'Catalyst loading cost': 'USD'}
     
 
 
     # Default operating temperature [K]
-    T_default: float = 463.15  # 190 C from  https://doi.org/10.1016/j.joule.2017.10.004
+    T_default: float = 463.15                   # 190 C from https://doi.org/10.1016/j.joule.2017.10.004
 
     #: Default operating pressure [Pa]
-    P_default:  float = 6e6 # 6 MPa from https://doi.org/10.1016/j.joule.2017.10.004
-    
-    #: Default residence time [hr]
-    tau_default: float = 1
+    P_default: float = 6e6                      # 6 MPa from https://doi.org/10.1016/j.joule.2017.10.004
 
-    # Default superficial velocity of solvent (m/s)
-    superficial_velocity_default: float = 0.001 # Just assumed 
+    #: Default hydraulic residence time [hr] — determines reactor volume from Q
+    tau_residence_default: float = 1/3          # 20 min
 
-    # Default catalyst bed void fraction (epsilon)
-    void_frac_default: float = 0.7    
+    # Default superficial velocity (m/s) — adjusted analytically if L/D is out of range
+    superficial_velocity_default: float = 0.001
 
+    # Default catalyst bed void fraction — fraction of bed volume occupied by fluid
+    void_frac_default: float = 0.7
 
-    # Default working volume fraction 
-    working_vol_default: float = 0.9
- 
-    # Default catayyst diameter [m]
-    # poplar_diameter_default: float = 0.004   
-    
+    # Default free-space fraction of total reactor volume (headspace above packed bed)
+    free_frac_default: float = 0.20
 
-    h2_consumption_default: float = h2_consumption   #  kg per dry kg biomass feed
+    # Hard upper bound on individual vessel volume [m³]; N_reactors is scaled up to satisfy this
+    V_max_limit_default: float = 100
 
-    N_reactors_default: float = 2   # Number of reactors
+    # Minimum allowable L/D ratio; u is increased analytically if L/D drops below this
+    LD_min_default: float = 3.0
+
+    # Maximum allowable L/D ratio; u is reduced analytically if L/D exceeds this
+    LD_max_default: float = 10.0
+
+    h2_consumption_default: float = h2_consumption   # kg H₂ per dry kg biomass feed
 
     def _init(
             self,
-            # add_OPEX: {},
-            T: Optional[float] = None, 
+            T: Optional[float] = None,
             P: Optional[float] = None,
-            tau: Optional[float] = None,
+            tau_residence: Optional[float] = None,
             vessel_material: Optional[str] = None,
             vessel_type: Optional[str] = None,
             superficial_velocity: Optional[float] = None,
             void_frac: Optional[float] = None,
-            working_vol: Optional[float] = None,
+            free_frac: Optional[float] = None,
+            V_max_limit: Optional[float] = None,
+            LD_min: Optional[float] = None,
+            LD_max: Optional[float] = None,
             h2_consumption: Optional[float] = None,
-            N_reactors: Optional[float] = None,
             *,
             reaction
             ):
-        
-        # self.add_OPEX = add_OPEX.copy()
+
         self.T = self.T_default if T is None else T
         self.P = self.P_default if P is None else P
-        self.tau = self.tau_default if tau is None else tau
+        self.tau_residence = self.tau_residence_default if tau_residence is None else tau_residence
         self.vessel_material = 'Stainless steel 316' if vessel_material is None else vessel_material
         self.vessel_type = 'Vertical' if vessel_type is None else vessel_type
         self.superficial_velocity = self.superficial_velocity_default if superficial_velocity is None else superficial_velocity
         self.void_frac = self.void_frac_default if void_frac is None else void_frac
-        self.working_vol = self.working_vol_default if working_vol is None else working_vol
+        self.free_frac = self.free_frac_default if free_frac is None else free_frac
+        self.V_max_limit = self.V_max_limit_default if V_max_limit is None else V_max_limit
+        self.LD_min = self.LD_min_default if LD_min is None else LD_min
+        self.LD_max = self.LD_max_default if LD_max is None else LD_max
         self.h2_consumption = self.h2_consumption_default if h2_consumption is None else h2_consumption
-        self.N_reactors = self.N_reactors_default if N_reactors is None else N_reactors
         self.reaction = reaction
-        #pump_1 = self.auxiliary('pump_1', bst.Pump, ins = self.ins[1])
         heat_exchanger_2 = self.auxiliary('heat_exchanger_2', bst.HXutility)
 
 
     def _size_bed(self):
 
-        #### Reactor volume sizing ########
+        #### Volumetric flow and reactor volume sizing ########
 
-        residence_time = self.tau
-        occupied_frac = 1 - self.void_frac  
-        working_vol = self.working_vol        
-        gaseous_flow = self.ins[1]
-        gas_V_w = gaseous_flow.F_vol * residence_time # [m3] Total liquid working volume
-        V_actual = gas_V_w/(self.void_frac * working_vol)/self.N_reactors  # [m3]
+        # Total feed flow: liquid solvent/lignin (ins[0]) + hydrogen gas (ins[1])
+        Q_total = self.ins[0].F_vol + self.ins[1].F_vol        # [m³/hr]
 
-        ##### Reactor diameter and length ########
-        u  = self.superficial_velocity
+        # Fluid holdup in the catalyst bed voids
+        V_fluid = Q_total * self.tau_residence                 # [m³]
 
-        Q_per_reactor_m3 = gaseous_flow.F_vol/self.N_reactors    # [m3/hr] Volumetric flow rate processed by any reactor
-        self.area = A  = Q_per_reactor_m3/(u*3600)
-        self.diameter = diameter = 2 * (A/np.pi) ** 0.5
-        self.length = length = V_actual/A
-        V_total = V_actual*self.N_reactors
+        # Packed bed volume (catalyst particles + void space)
+        V_bed = V_fluid / self.void_frac                       # [m³]
 
-        
-        return length, diameter, V_actual, V_total
+        # Total reactor volume: bed + free headspace above bed
+        V_reactor_total = V_bed / (1.0 - self.free_frac)      # [m³]
+
+        # Number of parallel reactors so each vessel stays within V_max_limit
+        N_reactors = max(1, ceil(V_reactor_total / self.V_max_limit))
+        V_per_reactor = V_reactor_total / N_reactors           # [m³]
+        Q_per_reactor = Q_total / N_reactors                   # [m³/hr]
+
+        #### Reactor geometry ########
+
+        u = self.superficial_velocity
+        A = Q_per_reactor / (u * 3600)                        # [m²]
+        diameter = 2.0 * (A / np.pi) ** 0.5                   # [m]
+        length = V_per_reactor / A                             # [m]
+
+        # Enforce L/D within [LD_min, LD_max]; adjust u analytically if needed.
+        # From L/D = V/(A) / (2√(A/π)) → A = (V√π / (2·(L/D)))^(2/3)
+        LD = length / diameter
+        if LD > self.LD_max:
+            A = (V_per_reactor * np.pi ** 0.5 / (2.0 * self.LD_max)) ** (2.0 / 3.0)
+            u = Q_per_reactor / (A * 3600)
+            self.superficial_velocity = u
+            diameter = 2.0 * (A / np.pi) ** 0.5
+            length = V_per_reactor / A
+        elif LD < self.LD_min:
+            A = (V_per_reactor * np.pi ** 0.5 / (2.0 * self.LD_min)) ** (2.0 / 3.0)
+            u = Q_per_reactor / (A * 3600)
+            self.superficial_velocity = u
+            diameter = 2.0 * (A / np.pi) ** 0.5
+            length = V_per_reactor / A
+
+        self.area = A
+        self.diameter = diameter
+        self.length = length
+        self.N_reactors = N_reactors
+
+        return length, diameter, V_per_reactor, V_reactor_total, N_reactors
         
     def _run(self):
         solvent, hydrogen = self.ins
@@ -606,40 +637,28 @@ class HydrogenolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         
 
     def _design(self):
-        length,diameter, V_actual, V_total = self._size_bed()   # Calling size bed function to determine diameter and length 
+        length, diameter, V_per_reactor, V_total, N_reactors = self._size_bed()
 
-
-        self.set_design_result('Diameter', 'ft', diameter)  
+        self.set_design_result('Diameter', 'ft', diameter)
         self.set_design_result('Length', 'ft', length)
-        self.set_design_result('Reactor volume', 'm3', V_actual)
+        self.set_design_result('Reactor volume', 'm3', V_per_reactor)
         self.set_design_result('Total volume', 'm3', V_total)
+        self.set_design_result('Residence time', 'hr', self.tau_residence)
+        self.set_design_result('Number of reactors', '', N_reactors)
 
-        self.set_design_result('Residence time', 'hr', self.tau)
-
-
-        
-        # Calculates weight based off pressure, diameter and length
-        # Adds vcessel type wall thickness, vessel weight, diameter and length to dictionary
-        # But diameter and length are already there because of set_design_result above
         self.design_results.update(
-            self._vertical_vessel_design(    
-                self.P*(1/6894.76),
-                self.design_results['Diameter']*3.28084,
-                self.design_results['Length']*3.28084
+            self._vertical_vessel_design(
+                self.P * (1/6894.76),
+                self.design_results['Diameter'] * 3.28084,
+                self.design_results['Length'] * 3.28084
             )
         )
-        
-        duty = (rcf_oil_yield['Monomers'])**0.5 * self.ins[0].imol['SolubleLignin'] *1000 * 60.5 * 4.184 
-        # 70.7 wt% (equivalent to mol% as studies use it interchangeably) B-O-4 linkages in lignin * Solubilized lignin flow [kmol/hr] * 1000 [mol/kmol] * 60.5 kcal/1 mol of B-0-4 linkage * 4184 kJ/kcal
 
-        heat_utility = self.add_heat_utility(duty/self.N_reactors, self.T) # BioSTEAM automatically setting utility based off duty
-                                             
+        duty = (rcf_oil_yield['Monomers'])**0.5 * self.ins[0].imol['SolubleLignin'] * 1000 * 60.5 * 4.184
+        # B-O-4 linkages in lignin [mol fraction] × SolubleLignin [kmol/hr] × 1000 [mol/kmol] × 60.5 kcal/mol × 4.184 kJ/kcal
+
+        self.add_heat_utility(duty / N_reactors, self.T)
         self.set_design_result('Duty', 'kJ/hr', duty)
-        #pressure_drop = self._calculate_pressure_drop()                  
-        
-        #self.set_design_result('Pressure drop', 'bar', pressure_drop)
-        #self.pump_1.P = (self.P - self.ins[1].P) + (pressure_drop*1e5)
-        #self.pump_1.simulate()
 
 
         
@@ -653,30 +672,19 @@ class HydrogenolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         
 
     def _cost(self):
-        design = self.design_results # Calling the dictionary used to store design results in design method above 
+        design = self.design_results
+        baseline_purchase_costs = self.baseline_purchase_costs
+        weight = design['Weight']
+        N_reactors = design['Number of reactors']
 
-        baseline_purchase_costs = self.baseline_purchase_costs # Dictionary for storing baseline costs
-
-        weight = design['Weight']  # weight parameter stores the value from the 'Weight' key in the design dictionnary
-
-
-        catalyst_cost_total = prices['NiC_catalyst']*RCF_catalyst['loading']*(feed_parameters['flow']*1e3)
-
+        catalyst_cost_total = prices['NiC_catalyst'] * RCF_catalyst['loading'] * (feed_parameters['flow'] * 1e3)
         design['Catalyst loading cost'] = catalyst_cost_total
 
-        # Calculates the baseline purchase cost based off diameter length and weight
-        baseline_purchase_costs.update( 
+        baseline_purchase_costs.update(
             self._vessel_purchase_cost(weight, design['Diameter'], design['Length'])
         )
 
-        self.parallel['self'] = self.N_reactors # Used to create multiple of the same beds
-        #add_OPEX = (design['Catalyst loading cost']*2)
-        #self._add_OPEX = {'Additional OPEX': add_OPEX} 
-        
-        """
-        Need to add costs for catalyst replacement, current design only has 1 time loading cost
-        Duty has been added successfully
-        """
+        self.parallel['self'] = N_reactors
 
 
 
