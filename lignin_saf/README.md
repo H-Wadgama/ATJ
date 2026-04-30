@@ -43,8 +43,8 @@ Both scripts follow the same pattern: set up thermodynamics, call the factory fu
 
 ## Process areas
 
-The proposed process areas are*:
-Area 100: Feed storage and handling 
+The proposed process areas are:
+Area 100: Feed storage and handling
 Area 200: RCF (reductive catalytic fractionation — solvolysis + hydrogenolysis + solvent recovery)
 Area 300: Products recovery (EtOAc liquid–liquid extraction → purified lignin oil)
 Area 400: Wastewater treatment
@@ -52,7 +52,7 @@ Area 500: Combustor, boiler and turbogenerator
 Area 600: Product and feed chemical storage
 Area 700: Utilities
 
-*Current design includes Area 200 and Area 300 only
+Current design includes Area 200, 300, 400, and 500. Areas 100, 600, and 700 are not yet modeled.
 
 ## Key source files
 
@@ -60,11 +60,57 @@ Area 700: Utilities
 |---|---|
 | `ligsaf_system.py` | `create_rcf_system(ins=None)` — Area 200 factory function |
 | `ligsaf_purification_system.py` | `create_rcf_oil_purification_system(ins=None)` — Area 300 factory function |
+| `ligsaf_utilities_system.py` | `create_rcf_utilities_system()` — Area 400 + 500 factory function; returns `(BT, WWT)` |
 | `ligsaf_units.py` | Custom BioSTEAM unit classes: `SolvolysisReactor`, `HydrogenolysisReactor`, `PSA`, `CatalystMixer` |
 | `ligsaf_settings.py` | All process parameters, prices, biomass composition, partition coefficients |
 | `ligsaf_chemicals.py` | Chemical property definitions |
-| `rcf_purification.py` | Entry-point script: runs Area 200 + Area 300 sequentially |
+| `rcf_purification.py` | Entry-point script: builds and simulates the combined system (Areas 200–500) |
 | `rcf_system.ipynb` | Main interactive notebook for full integrated system analysis |
+
+## Utilities system (Area 400 + 500)
+
+`create_rcf_utilities_system()` in `ligsaf_utilities_system.py` returns a `(BT, WWT)` tuple. Call it after creating all upstream systems (so the named streams exist on the flowsheet) but before assembling the combined system.
+
+```python
+from lignin_saf.ligsaf_utilities_system import create_rcf_utilities_system
+
+rcf_system               = create_rcf_system(ins=poplar_in)
+rcf_oil_purification_sys = create_rcf_oil_purification_system(ins=F.RCF_Oil)
+BT, WWT                  = create_rcf_utilities_system()
+
+rcf_combined_system = bst.System(
+    'Combined_RCF_System',
+    path=(rcf_system, rcf_oil_purification_sys, WWT),
+    facilities=[BT],
+)
+rcf_combined_system.simulate()
+```
+
+**BT** (`bst.facilities.BoilerTurbogenerator`, `fuel_price=0.2612`) receives:
+- `ins[0]` — liquid/solid combustion feed (empty in RCF-only mode; wire solid waste here)
+- `ins[1]` — gas combustion feed → `F.Purge_Light_Gases` (PSA purge)
+- `ins[2–6]` — makeup water, natural gas, lime, boiler chemicals, air (auto-set by BioSTEAM)
+
+**WWT** (`bst.create_conventional_wastewater_treatment_system`, Humbird 2011 configuration) receives:
+- `F.WW_10` — aqueous raffinate from EtOAc LLE (Area 300)
+- `F.WastePulp` — water/EtOAc bleed from CENT203 decanter (Area 300)
+- `F.RCF_WW` — combined RCF wastewater (Area 200)
+
+**Adding more streams in the future:**
+
+For WWT, extend the `ins` tuple in `create_rcf_utilities_system()`:
+```python
+WWT = bst.create_conventional_wastewater_treatment_system(
+    'WWT', ins=(F.WW_10, F.WastePulp, F.RCF_WW, F.WW_Etoh, ...)
+)
+```
+
+For BT, each combustion slot accepts one stream. Combine multiple feeds with a `bst.Mixer` first, then wire the mixer outlet to `BT.ins[0]` or `BT.ins[1]`, and add the mixers to `facilities` before BT:
+```python
+solid_mixer = bst.Mixer('MIX_BT_solid', ins=(F.Stream1, F.Stream2))
+BT.ins[0] = solid_mixer.outs[0]
+# in combined system: facilities=[solid_mixer, BT]
+```
 
 
 The main process assumptions:
