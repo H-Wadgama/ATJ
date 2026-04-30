@@ -233,18 +233,18 @@ K = c_extract (EtOAc-rich) / c_raffinate (water-rich). All values are placeholde
 
 ## Utilities System (Area 400 + 500)
 
-Built by `create_rcf_utilities_system()` in `ligsaf_utilities_system.py`. Returns `(BT, WWT)`. Call after all upstream factory functions so the required named streams exist on the flowsheet.
+Built by `create_rcf_utilities_system()` in `ligsaf_utilities_system.py`. Returns `(BT, WWT, gas_mixer)`. Call after all upstream factory functions so the required named streams exist on the flowsheet.
 
 **Assembly pattern:**
 ```python
 rcf_system               = create_rcf_system(ins=poplar_in)
 rcf_oil_purification_sys = create_rcf_oil_purification_system(ins=F.RCF_Oil)
-BT, WWT                  = create_rcf_utilities_system()
+BT, WWT, gas_mixer       = create_rcf_utilities_system()
 
 rcf_combined_system = bst.System(
     'Combined_RCF_System',
     path=(rcf_system, rcf_oil_purification_sys, WWT),  # WWT is a System → path
-    facilities=[BT],                                    # BT is a Facility → facilities
+    facilities=[gas_mixer, BT],                         # gas_mixer must precede BT
 )
 rcf_combined_system.simulate()
 ```
@@ -253,9 +253,12 @@ rcf_combined_system.simulate()
 
 | Slot | Contents |
 |---|---|
-| `ins[0]` | Liquid/solid combustion feed (empty in RCF-only mode) |
-| `ins[1]` | Gas combustion feed → `F.Purge_Light_Gases` (PSA purge) |
+| `ins[0]` | WWT sludge (`WWT.outs[1]`) — dewatered biological sludge from S603 |
+| `ins[1]` | `gas_mixer` outlet — PSA purge gas + WWT biogas combined |
 | `ins[2–6]` | Makeup water, natural gas, lime, boiler chems, air (auto-set) |
+
+**`gas_mixer`** — `bst.Mixer('MIX_BT_gas', ins=(F.Purge_Light_Gases, WWT.outs[0]))`:
+Combines PSA purge gas and WWT biogas before the BT gas combustion slot. Listed before `BT` in `facilities` so its outlet is populated before BT consumes it.
 
 **WWT** — `bst.create_conventional_wastewater_treatment_system('WWT', ...)` (Humbird 2011):
 
@@ -284,30 +287,26 @@ for unit in WWT.units:
 
 These undigested compounds accumulate through the WWT path and can make the strict 79% moisture target infeasible. `strict_moisture_content=False` lets the centrifuge use whatever water is available without raising `InfeasibleRegion`. Set it back to `True` once WWT stream chemistry is validated against experimental RCF wastewater data.
 
-**WWT outputs (currently unconnected — no downstream sink):**
+**WWT outputs:**
 
-| Slot | Stream | Description |
+| Slot | Stream | Description | Routed to |
+|---|---|---|---|
+| `WWT.outs[0]` | biogas | CH4 + CO2 from anaerobic digestion | `gas_mixer` → `BT.ins[1]` |
+| `WWT.outs[1]` | sludge | dewatered biological sludge from S603 | `BT.ins[0]` |
+| `WWT.outs[2]` | RO treated water | clean permeate from reverse osmosis | unconnected |
+| `WWT.outs[3]` | brine | RO reject | unconnected |
+
+**BT combustion requirements — known gap:**
+
+BioSTEAM's BT auto-derives combustion reactions from a chemical's elemental formula (`CₓHᵧOᵤ + O₂ → CO₂ + H₂O`). Any chemical with `atoms={}` (no formula) is treated as inert ash. Three RCF chemicals in `ligsaf_chemicals.py` are defined with only `MW` and will not combust in BT or be counted as digestible by WWT:
+
+| Chemical | Missing | Effect |
 |---|---|---|
-| `WWT.outs[0]` | biogas | CH4 + CO2 from anaerobic digestion |
-| `WWT.outs[1]` | sludge | dewatered biological sludge from S603 |
-| `WWT.outs[2]` | RO treated water | clean permeate from reverse osmosis |
-| `WWT.outs[3]` | brine | RO reject |
+| `G_Dimer` (MW 362.42) | `formula` | passed through as ash in BT; skipped by WWT digestion |
+| `S_Oligomer` (MW 628.67) | `formula` | passed through as ash in BT; skipped by WWT digestion |
+| `G_Oligomer` (MW 540.65) | `formula` | passed through as ash in BT; skipped by WWT digestion |
 
-To route sludge and biogas to BT (not yet implemented), update `create_rcf_utilities_system()`:
-```python
-BT.ins[0] = WWT.outs[1]   # sludge → solid/liquid combustion slot
-
-gas_mixer = bst.Mixer('MIX_BT_gas', ins=(F.Purge_Light_Gases, WWT.outs[0]))
-BT.ins[1] = gas_mixer.outs[0]   # biogas + purge gas → gas combustion slot
-```
-Add `gas_mixer` to `facilities` before `BT`:
-```python
-rcf_combined_system = bst.System(
-    'Combined_RCF_System',
-    path=(rcf_system, rcf_oil_purification_sys, WWT),
-    facilities=[gas_mixer, BT],
-)
-```
+Fix: add `formula='CₓHᵧOᵤ'` to each in `ligsaf_chemicals.py` (source: Bartling et al. Fig S8 — these are the same six components referenced there). This simultaneously enables BT combustion reactions and WWT digestion (`get_digestable_organic_chemicals` requires `'C' in atoms`). If only BT energy balance matters, setting `chemical.HHV` directly is an alternative, but the formula approach fixes both issues.
 
 **Extending BT and WWT with more streams:**
 - WWT: add streams to the `ins` tuple inside `create_rcf_utilities_system()`.
@@ -321,7 +320,7 @@ rcf_combined_system = bst.System(
 | `ligsaf_settings.py` | All process parameters, reaction conditions, prices, biomass composition, EtOAc LLE partition data |
 | `ligsaf_system.py` | `create_rcf_system(ins=None)` — Area 200 factory function |
 | `ligsaf_purification_system.py` | `create_rcf_oil_purification_system(ins=None)` — Area 300 EtOAc LLE factory function |
-| `ligsaf_utilities_system.py` | `create_rcf_utilities_system()` — Area 400 + 500; returns `(BT, WWT)` |
+| `ligsaf_utilities_system.py` | `create_rcf_utilities_system()` — Area 400 + 500; returns `(BT, WWT, gas_mixer)` |
 | `ligsaf_chemicals.py` | Chemical property definitions for the RCF system |
 | `cellulosic_tea.py` | `CellulosicEthanolTEA` class used for integrated system TEA |
 | `rcf_purification.py` | Entry-point script: builds and simulates the combined system (Areas 200–500) |
