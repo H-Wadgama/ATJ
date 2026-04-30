@@ -1,15 +1,16 @@
+import biosteam as bst
+from biosteam import main_flowsheet as F
+
 from lignin_saf.ligsaf_chemicals import create_chemicals
 from lignin_saf.ligsaf_settings import feed_parameters
 from lignin_saf.ligsaf_system import create_rcf_system
 from lignin_saf.ligsaf_purification_system import create_rcf_oil_purification_system
-from biosteam import main_flowsheet as F
-import biosteam as bst
+
 
 chems = create_chemicals()
 bst.settings.set_thermo(chems)
 bst.settings.CEPCI = 541.7   # 2016 USD basis
 
-# Poplar group must be defined before creating any stream that references it
 chems.define_group(
     name='Poplar',
     IDs=['Glucan', 'Xylan', 'Arabinan', 'Mannan', 'Galactan',
@@ -29,9 +30,3 @@ rcf_system.simulate()
 
 rcf_oil_purification_sys = create_rcf_oil_purification_system(ins=F.RCF_Oil)
 rcf_oil_purification_sys.simulate()
-
-# Outputs
-purified_oil = F.Purified_RCF_Oil
-aqueous_waste = F.RCF_Aqueous_Waste
-
-purified_oil.show()

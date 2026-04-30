@@ -120,3 +120,30 @@ prices = {
     'Hexane' : hexane_price,
     'EthylAcetate': ethyl_acetate_price
 }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RCF Oil Purification — Ethyl Acetate Liquid–Liquid Extraction
+# References:
+#   Qin et al. 2022, React. Chem. Eng. (10.1039/D2RE00275B)
+#   Luo et al. 2024, ACS Sust. Chem. Eng., 12, 12919–12926
+# ─────────────────────────────────────────────────────────────────────────────
+
+etoac_purification = {
+    'solvent_to_crude_ratio': 1.1,      # [L/kg]  EtOAc volume per kg crude RCF oil (10 mL/g basis from D2RE00275B)
+    'etoac_h2o_ratio':        1.0,      # [v/v]   EtOAc : water volume ratio (D2RE00275B)
+    'N_stages':               3,        # [-]     number of extraction stages (ACS SCE 2024)
+    'EtOAc_recycle_split':    0.95,     # [-]     fraction of EtOAc recovered in centrifuge and recycled
+    'oil_flash_T':            400,      # [K]     flash temperature to evaporate residual EtOAc overhead
+    'oil_flash_P':            101325,   # [Pa]    flash pressure
+}
+
+# Partition coefficients for EtOAc / water LLE
+# K = c_extract (EtOAc-rich phase) / c_raffinate (water-rich phase)
+# Placeholder values — replace with experimental LLE data when available
+# Note: Water K = 0.01 (strongly prefers aqueous raffinate); lignin products K >> 1 (prefer EtOAc)
+etoac_partition_IDs = (
+    'Water', 'Propylguaiacol', 'Propylsyringol',
+    'Syringaresinol', 'G_Dimer', 'S_Oligomer', 'G_Oligomer',
+)
+etoac_partition_K = (0.01, 200.0, 200.0, 500.0, 109.0, 200.0, 200.0)

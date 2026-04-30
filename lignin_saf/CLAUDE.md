@@ -1,6 +1,6 @@
 # lignin_saf/CLAUDE.md
 
-Context for the `rcf_system` defined in `rcf_system.ipynb`.
+Context for the RCF system and downstream purification system.
 
 ## rcf_system Overview
 
@@ -63,8 +63,8 @@ Recycle specs: fresh feed in each mixer is adjusted so that `fresh + recycle = r
 
 | Stream | Source Unit | Description | Downstream |
 |---|---|---|---|
-| `RCF_Oil` | `water_remover` (FLASH118) | Crude lignin oil: 50% monomers, 25% dimers, 25% oligomers; C5–C15 range | → `rcf_oil_purification_sys` (ethyl acetate LLE) |
-| `Carbohydrate_Pulp` | `solvolysis_reactor` (RCF103-S) | Cellulose-rich pulp, 90% cellulose retention | → `etoh_system` (cellulosic ethanol) |
+| `RCF_Oil` | `water_remover` (FLASH118) | Crude lignin oil: 50% monomers, 25% dimers, 25% oligomers; C5–C15 range | → `rcf_oil_purification_sys` (EtOAc LLE) |
+| `Carbohydrate_Pulp` | `solvolysis_reactor` (RCF103_S) | Cellulose-rich pulp, 90% cellulose retention | → `etoh_system` (cellulosic ethanol) |
 | `RCF_WW` | `wastewater_mixer` | Combined wastewater (light organics, unconverted solvent) | → wastewater treatment |
 | `Purge_Light_Gases` | `psa_system` (PSA111) | Non-H₂ light gases | purged / flared |
 
@@ -168,18 +168,78 @@ u = Q_per_reactor / (A × 3600)
 
 ## Downstream Systems (outside rcf_system)
 
+- `rcf_oil_purification_sys` — built by `create_rcf_oil_purification_system()` in `ligsaf_purification_system.py`; EtOAc LLE on `RCF_Oil` → `Purified_RCF_Oil`
 - `etoh_system` — cellulosic ethanol from `biorefineries.cellulosic`, fed by `Carbohydrate_Pulp`
-- `rcf_oil_purification_sys` — ethyl acetate LLE to isolate monomers from `RCF_Oil`
-- `monomer_purification_sys` — hexane LLE for final monomer separation
+- `monomer_purification_sys` — hexane LLE for monomer/dimer separation (currently commented out pending K-value data)
 - `combined_sys` — full integrated system wrapping all of the above (330 days/yr × 24 hr)
 - `combined_sys_hx` — same with `HeatExchangerNetwork` (T_min_app=10°C)
+
+## RCF Oil Purification System
+
+Built by `create_rcf_oil_purification_system(ins=None)` in `ligsaf_purification_system.py`. Accepts the crude `RCF_Oil` stream from FLASH118 and recovers it as `Purified_RCF_Oil` via ethyl acetate liquid–liquid extraction.
+
+**Import pattern:**
+```python
+from lignin_saf.ligsaf_purification_system import create_rcf_oil_purification_system
+rcf_oil_purification_sys = create_rcf_oil_purification_system(ins=F.RCF_Oil)
+rcf_oil_purification_sys.simulate()
+```
+If `ins=None`, `F.RCF_Oil` is grabbed from the main flowsheet — `rcf_system` must be simulated first.
+
+**Unit operations:**
+
+| Unit ID | Variable Name | Type | Function | Key Parameters |
+|---|---|---|---|---|
+| MIX200 | `solvent_mixer` | Mixer | Mix fresh EtOAc makeup + solvent recycle | spec sets makeup = total required − recycle |
+| LLE200 | `lle_column` | MultiStageMixerSettlers | 3-stage countercurrent EtOAc/water LLE | N_stages=3, feed_stages=(0, −1); lignin products partition to EtOAc extract |
+| FLASH201 | `oil_flash` | Flash | Evaporate EtOAc overhead; **`Purified_RCF_Oil`** exits as bottoms | T=400 K, P=1 atm |
+| HX202 | `solvent_cooler` | HXutility | Condense EtOAc vapor | V=0, rigorous |
+| CENT203 | `solvent_decanter` | LiquidsSplitCentrifuge | Split EtOAc from water; EtOAc → `solvent_recycle` | EtOAc split = 0.95 |
+
+**Recycle:** `solvent_recycle` (CENT203 → MIX200). Fresh EtOAc makeup computed by the `adjust_fresh_solvent_flow` spec on every iteration.
+
+**Output streams:**
+
+| Stream | Source | Description |
+|---|---|---|
+| `Purified_RCF_Oil` | FLASH201 bottoms | Concentrated lignin oil (monomers + dimers + oligomers), EtOAc removed |
+| `RCF_Aqueous_Waste` | LLE200 raffinate | Aqueous phase from LLE; to wastewater treatment |
+| `WW_EtOAc` | CENT203 second outlet | Water bleed from decanter; to wastewater treatment |
+
+**Parameters (all in `ligsaf_settings.py` → `etoac_purification` dict):**
+
+| Parameter | Value | Notes |
+|---|---|---|
+| `solvent_to_crude_ratio` | 1.1 L/kg | EtOAc volume per kg crude RCF oil; from 10.1039/D2RE00275B |
+| `etoac_h2o_ratio` | 1.0 v/v | EtOAc : water ratio in solvent; from D2RE00275B |
+| `N_stages` | 3 | Extraction stages; from ACS SCE 2024, 12, 12919 |
+| `EtOAc_recycle_split` | 0.95 | Fraction of EtOAc recovered in centrifuge |
+| `oil_flash_T` | 400 K | Flash temperature to evaporate EtOAc |
+| `oil_flash_P` | 101325 Pa | Flash pressure |
+
+**Partition coefficients (`etoac_partition_IDs` / `etoac_partition_K` in `ligsaf_settings.py`):**
+
+K = c_extract (EtOAc-rich) / c_raffinate (water-rich). All values are placeholders pending experimental LLE data.
+
+| Component | K |
+|---|---|
+| Water | 0.01 (strongly prefers aqueous phase) |
+| Propylguaiacol | 200 |
+| Propylsyringol | 200 |
+| Syringaresinol | 500 |
+| G_Dimer | 109 |
+| S_Oligomer | 200 |
+| G_Oligomer | 200 |
 
 ## Key Source Files
 
 | File | Contents |
 |---|---|
 | `ligsaf_units.py` | `SolvolysisReactor`, `HydrogenolysisReactor`, `PSA`, `CatalystMixer` class definitions |
-| `ligsaf_settings.py` | All process parameters, reaction conditions, prices, biomass composition |
+| `ligsaf_settings.py` | All process parameters, reaction conditions, prices, biomass composition, EtOAc LLE partition data |
+| `ligsaf_system.py` | `create_rcf_system(ins=None)` — Area 200 factory function |
+| `ligsaf_purification_system.py` | `create_rcf_oil_purification_system(ins=None)` — Area 300 EtOAc LLE factory function |
 | `ligsaf_chemicals.py` | Chemical property definitions for the RCF system |
 | `cellulosic_tea.py` | `CellulosicEthanolTEA` class used for integrated system TEA |
+| `rcf_purification.py` | Entry-point script: runs Area 200 + Area 300 sequentially |
 | `rcf.py` | RCF-specific helper functions |
