@@ -34,18 +34,37 @@ Then delete `<env>/lib/site-packages/flexsolve/__pycache__/numerical_analysis.cp
 
 The main working notebook is `rcf_system.ipynb`. Open it in VS Code or Jupyter and run cells sequentially.
 
+For standalone scripts, two entry-point files are available:
+
+- `rcf_purification.py` — runs the RCF system followed by the EtOAc LLE purification system and prints results. Good for quick iteration on Area 200–300.
+- `rcf_4_21_2026` — runs the RCF loop only (no purification).
+
+Both scripts follow the same pattern: set up thermodynamics, call the factory function, simulate, inspect.
+
 ## Process areas
 
 The proposed process areas are*:
 Area 100: Feed storage and handling 
-Area 200: RCF 
-Area 300: Products recovery
+Area 200: RCF (reductive catalytic fractionation — solvolysis + hydrogenolysis + solvent recovery)
+Area 300: Products recovery (EtOAc liquid–liquid extraction → purified lignin oil)
 Area 400: Wastewater treatment
-Area 500: Combuster, boiler and turbogenerator
+Area 500: Combustor, boiler and turbogenerator
 Area 600: Product and feed chemical storage
 Area 700: Utilities
 
 *Current design includes Area 200 and Area 300 only
+
+## Key source files
+
+| File | Role |
+|---|---|
+| `ligsaf_system.py` | `create_rcf_system(ins=None)` — Area 200 factory function |
+| `ligsaf_purification_system.py` | `create_rcf_oil_purification_system(ins=None)` — Area 300 factory function |
+| `ligsaf_units.py` | Custom BioSTEAM unit classes: `SolvolysisReactor`, `HydrogenolysisReactor`, `PSA`, `CatalystMixer` |
+| `ligsaf_settings.py` | All process parameters, prices, biomass composition, partition coefficients |
+| `ligsaf_chemicals.py` | Chemical property definitions |
+| `rcf_purification.py` | Entry-point script: runs Area 200 + Area 300 sequentially |
+| `rcf_system.ipynb` | Main interactive notebook for full integrated system analysis |
 
 
 The main process assumptions:
