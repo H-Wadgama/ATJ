@@ -10,7 +10,8 @@
       "Bash(pip list:*)",
       "Bash(grep -h \"^import\\\\|^from\" \"C:/Users/mmw6427/OneDrive - The Pennsylvania State University/Shi_Wadgama_shared/Models/ATJSPK/lignin_saf/\"*.py)",
       "Bash(git config:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(python *)"
     ]
   }
 }

@@ -5,6 +5,7 @@ from lignin_saf.ligsaf_chemicals import create_chemicals
 from lignin_saf.ligsaf_settings import feed_parameters
 from lignin_saf.ligsaf_system import create_rcf_system
 from lignin_saf.ligsaf_purification_system import create_rcf_oil_purification_system
+from lignin_saf.ligsaf_utilities_system import create_rcf_utilities_system
 
 
 chems = create_chemicals()
@@ -26,7 +27,13 @@ poplar_in = bst.Stream('Poplar_In',
                        phase='l', units='kg/d')
 
 rcf_system = create_rcf_system(ins=poplar_in)
-rcf_system.simulate()
-
 rcf_oil_purification_sys = create_rcf_oil_purification_system(ins=F.RCF_Oil)
-rcf_oil_purification_sys.simulate()
+BT, WWT = create_rcf_utilities_system()
+
+rcf_combined_system = bst.System(
+    'Combined_RCF_System',
+    path=(rcf_system, rcf_oil_purification_sys, WWT),
+    facilities=[BT],
+)
+rcf_combined_system.simulate()
+rcf_combined_system.show()

@@ -203,8 +203,8 @@ If `ins=None`, `F.RCF_Oil` is grabbed from the main flowsheet — `rcf_system` m
 | Stream | Source | Description |
 |---|---|---|
 | `Purified_RCF_Oil` | FLASH201 bottoms | Concentrated lignin oil (monomers + dimers + oligomers), EtOAc removed |
-| `RCF_Aqueous_Waste` | LLE200 raffinate | Aqueous phase from LLE; to wastewater treatment |
-| `WW_EtOAc` | CENT203 second outlet | Water bleed from decanter; to wastewater treatment |
+| `WW_10` | LLE200 raffinate | Aqueous phase from LLE; to WWT |
+| `WastePulp` | CENT203 second outlet | Water/EtOAc bleed from decanter; to WWT |
 
 **Parameters (all in `ligsaf_settings.py` → `etoac_purification` dict):**
 
@@ -231,6 +231,44 @@ K = c_extract (EtOAc-rich) / c_raffinate (water-rich). All values are placeholde
 | S_Oligomer | 200 |
 | G_Oligomer | 200 |
 
+## Utilities System (Area 400 + 500)
+
+Built by `create_rcf_utilities_system()` in `ligsaf_utilities_system.py`. Returns `(BT, WWT)`. Call after all upstream factory functions so the required named streams exist on the flowsheet.
+
+**Assembly pattern:**
+```python
+rcf_system               = create_rcf_system(ins=poplar_in)
+rcf_oil_purification_sys = create_rcf_oil_purification_system(ins=F.RCF_Oil)
+BT, WWT                  = create_rcf_utilities_system()
+
+rcf_combined_system = bst.System(
+    'Combined_RCF_System',
+    path=(rcf_system, rcf_oil_purification_sys, WWT),  # WWT is a System → path
+    facilities=[BT],                                    # BT is a Facility → facilities
+)
+rcf_combined_system.simulate()
+```
+
+**BT** — `bst.facilities.BoilerTurbogenerator('BT', fuel_price=0.2612)`:
+
+| Slot | Contents |
+|---|---|
+| `ins[0]` | Liquid/solid combustion feed (empty in RCF-only mode) |
+| `ins[1]` | Gas combustion feed → `F.Purge_Light_Gases` |
+| `ins[2–6]` | Makeup water, natural gas, lime, boiler chems, air (auto-set) |
+
+**WWT** — `bst.create_conventional_wastewater_treatment_system('WWT', ...)` (Humbird 2011):
+
+| Inlet stream | Source |
+|---|---|
+| `F.WW_10` | LLE200 raffinate (Area 300) |
+| `F.WastePulp` | CENT203 decanter bleed (Area 300) |
+| `F.RCF_WW` | Combined RCF wastewater (Area 200) |
+
+**Extending BT and WWT with more streams:**
+- WWT: add streams to the `ins` tuple inside `create_rcf_utilities_system()`.
+- BT: each combustion slot takes one stream; use a `bst.Mixer` to combine multiple feeds, add the mixer to `facilities` before BT, and wire `BT.ins[0]` or `BT.ins[1]` to the mixer outlet.
+
 ## Key Source Files
 
 | File | Contents |
@@ -239,7 +277,8 @@ K = c_extract (EtOAc-rich) / c_raffinate (water-rich). All values are placeholde
 | `ligsaf_settings.py` | All process parameters, reaction conditions, prices, biomass composition, EtOAc LLE partition data |
 | `ligsaf_system.py` | `create_rcf_system(ins=None)` — Area 200 factory function |
 | `ligsaf_purification_system.py` | `create_rcf_oil_purification_system(ins=None)` — Area 300 EtOAc LLE factory function |
+| `ligsaf_utilities_system.py` | `create_rcf_utilities_system()` — Area 400 + 500; returns `(BT, WWT)` |
 | `ligsaf_chemicals.py` | Chemical property definitions for the RCF system |
 | `cellulosic_tea.py` | `CellulosicEthanolTEA` class used for integrated system TEA |
-| `rcf_purification.py` | Entry-point script: runs Area 200 + Area 300 sequentially |
+| `rcf_purification.py` | Entry-point script: builds and simulates the combined system (Areas 200–500) |
 | `rcf.py` | RCF-specific helper functions |

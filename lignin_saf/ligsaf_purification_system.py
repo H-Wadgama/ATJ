@@ -37,9 +37,9 @@ def create_rcf_oil_purification_system(ins=None):
         bst.settings.CEPCI = 541.7
 
     Key output streams (accessible via F.<name> after simulate()):
-        Purified_RCF_Oil  — bottoms of FLASH201; concentrated lignin oil
-        RCF_Aqueous_Waste — aqueous raffinate from LLE200; to wastewater
-        WW_EtOAc          — water bleed from CENT203 decanter; to wastewater
+        Purified_RCF_Oil — bottoms of FLASH201; concentrated lignin oil
+        WW_10            — aqueous raffinate from LLE200; to wastewater treatment
+        WastePulp        — water/EtOAc bleed from CENT203 decanter; to wastewater treatment
     """
     crude_rcf = F.RCF_Oil if ins is None else ins
 
@@ -83,7 +83,7 @@ def create_rcf_oil_purification_system(ins=None):
     lle_column = bst.MultiStageMixerSettlers(
         'LLE200',
         ins=(crude_rcf, solvent_mixer-0),
-        outs=('', 'RCF_Aqueous_Waste'),
+        outs=('', 'WW_10'),
         feed_stages=(0, -1),
         N_stages=N_stages,
         partition_data=partition_data,
@@ -111,7 +111,7 @@ def create_rcf_oil_purification_system(ins=None):
     solvent_decanter = bst.LiquidsSplitCentrifuge(
         'CENT203',
         ins=solvent_cooler-0,
-        outs=(solvent_recycle, 'WW_EtOAc'),
+        outs=(solvent_recycle, 'WastePulp'),
         split={'EthylAcetate': recycle_split},
     )
 
