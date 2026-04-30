@@ -17,12 +17,15 @@ def create_rcf_utilities_system():
     Returns
     -------
     BT : bst.facilities.BoilerTurbogenerator
-        ins[0] — liquid/solid combustion feed (empty; no solid waste in RCF-only mode)
-        ins[1] — gas combustion feed (F.Purge_Light_Gases)
+        ins[0] — liquid/solid combustion feed (empty in RCF-only mode)
+        ins[1] — gas combustion feed: F.Purge_Light_Gases (PSA purge)
         ins[2-6] — makeup water, natural gas, lime, boiler chems, air (auto-set)
     WWT : bst.System
         Conventional anaerobic/aerobic wastewater treatment system
-        (Humbird 2011 configuration) fed by WW_10, WastePulp, and RCF_WW.
+        (Humbird 2011 configuration) fed by F.WW_10, F.WastePulp, and F.RCF_WW.
+        The internal SludgeCentrifuge runs with strict_moisture_content=False
+        because the Humbird 79% moisture target was calibrated for cellulosic-
+        ethanol streams; RCF wastewater has a different organic profile.
     """
     BT = bst.facilities.BoilerTurbogenerator('BT', fuel_price=0.2612)
     BT.ins[1] = F.Purge_Light_Gases
@@ -31,5 +34,13 @@ def create_rcf_utilities_system():
         'WWT',
         ins=(F.WW_10, F.WastePulp, F.RCF_WW),
     )
+    # The Humbird WWT sludge centrifuge targets 79% moisture calibrated for
+    # cellulosic-ethanol-scale organic loadings. RCF wastewater has a different
+    # organic profile (Acetate is in non_digestables; G_Dimer/S_Oligomer/G_Oligomer
+    # have no formula so atoms={} and are skipped by get_digestable_organic_chemicals).
+    # Relax to a soft constraint so the simulation continues without halting.
+    for unit in WWT.units:
+        if hasattr(unit, 'strict_moisture_content'):
+            unit.strict_moisture_content = False
 
     return BT, WWT

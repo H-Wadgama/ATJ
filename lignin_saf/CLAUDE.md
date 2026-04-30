@@ -254,16 +254,60 @@ rcf_combined_system.simulate()
 | Slot | Contents |
 |---|---|
 | `ins[0]` | Liquid/solid combustion feed (empty in RCF-only mode) |
-| `ins[1]` | Gas combustion feed → `F.Purge_Light_Gases` |
+| `ins[1]` | Gas combustion feed → `F.Purge_Light_Gases` (PSA purge) |
 | `ins[2–6]` | Makeup water, natural gas, lime, boiler chems, air (auto-set) |
 
 **WWT** — `bst.create_conventional_wastewater_treatment_system('WWT', ...)` (Humbird 2011):
 
 | Inlet stream | Source |
 |---|---|
-| `F.WW_10` | LLE200 raffinate (Area 300) |
-| `F.WastePulp` | CENT203 decanter bleed (Area 300) |
+| `F.WW_10` | LLE200 raffinate (Area 300) — predominantly water |
+| `F.WastePulp` | CENT203 decanter bleed (Area 300) — predominantly water + 5% EtOAc |
 | `F.RCF_WW` | Combined RCF wastewater (Area 200) |
+
+Note: `WastePulp` is predominantly water. In `CENT203`, `split={'EthylAcetate': 0.95}` means Water defaults to split=0.0 (all water → `outs[1]` = WastePulp). Only 5% of EtOAc ends up in WastePulp.
+
+The internal `SludgeCentrifuge` (S603) is patched after WWT creation in `create_rcf_utilities_system()` (`ligsaf_utilities_system.py`):
+
+```python
+for unit in WWT.units:
+    if hasattr(unit, 'strict_moisture_content'):
+        unit.strict_moisture_content = False   # ← toggle here
+    # To adjust the target moisture fraction (default 0.79 from Humbird):
+    # if hasattr(unit, 'moisture_content'):
+    #     unit.moisture_content = 0.6
+```
+
+**Why this is needed:** The Humbird 79% moisture target was calibrated for cellulosic-ethanol organic loadings. RCF wastewater has a different organic profile:
+- `Acetate` is in `non_digestables` → passes through the bioreactors unreacted
+- `G_Dimer`, `S_Oligomer`, `G_Oligomer` have no molecular formula (`atoms={}`) → `get_digestable_organic_chemicals` returns `'C' in atoms = False`, skipping them
+
+These undigested compounds accumulate through the WWT path and can make the strict 79% moisture target infeasible. `strict_moisture_content=False` lets the centrifuge use whatever water is available without raising `InfeasibleRegion`. Set it back to `True` once WWT stream chemistry is validated against experimental RCF wastewater data.
+
+**WWT outputs (currently unconnected — no downstream sink):**
+
+| Slot | Stream | Description |
+|---|---|---|
+| `WWT.outs[0]` | biogas | CH4 + CO2 from anaerobic digestion |
+| `WWT.outs[1]` | sludge | dewatered biological sludge from S603 |
+| `WWT.outs[2]` | RO treated water | clean permeate from reverse osmosis |
+| `WWT.outs[3]` | brine | RO reject |
+
+To route sludge and biogas to BT (not yet implemented), update `create_rcf_utilities_system()`:
+```python
+BT.ins[0] = WWT.outs[1]   # sludge → solid/liquid combustion slot
+
+gas_mixer = bst.Mixer('MIX_BT_gas', ins=(F.Purge_Light_Gases, WWT.outs[0]))
+BT.ins[1] = gas_mixer.outs[0]   # biogas + purge gas → gas combustion slot
+```
+Add `gas_mixer` to `facilities` before `BT`:
+```python
+rcf_combined_system = bst.System(
+    'Combined_RCF_System',
+    path=(rcf_system, rcf_oil_purification_sys, WWT),
+    facilities=[gas_mixer, BT],
+)
+```
 
 **Extending BT and WWT with more streams:**
 - WWT: add streams to the `ins` tuple inside `create_rcf_utilities_system()`.

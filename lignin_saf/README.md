@@ -36,10 +36,10 @@ The main working notebook is `rcf_system.ipynb`. Open it in VS Code or Jupyter a
 
 For standalone scripts, two entry-point files are available:
 
-- `rcf_purification.py` — runs the RCF system followed by the EtOAc LLE purification system and prints results. Good for quick iteration on Area 200–300.
-- `rcf_4_21_2026` — runs the RCF loop only (no purification).
+- `rcf_purification.py` — builds and simulates the combined system (Areas 200–500): RCF + EtOAc LLE + WWT + BT. Good for quick iteration on the integrated process.
+- `rcf_4_21_2026` — same combined system with an additional TEA call at the end. Used for cost analysis runs.
 
-Both scripts follow the same pattern: set up thermodynamics, call the factory function, simulate, inspect.
+Both scripts follow the same pattern: set up thermodynamics, call the factory functions, assemble the combined system, simulate.
 
 ## Process areas
 
@@ -87,16 +87,56 @@ rcf_combined_system.simulate()
 ```
 
 **BT** (`bst.facilities.BoilerTurbogenerator`, `fuel_price=0.2612`) receives:
-- `ins[0]` — liquid/solid combustion feed (empty in RCF-only mode; wire solid waste here)
+- `ins[0]` — liquid/solid combustion feed (empty in RCF-only mode)
 - `ins[1]` — gas combustion feed → `F.Purge_Light_Gases` (PSA purge)
 - `ins[2–6]` — makeup water, natural gas, lime, boiler chemicals, air (auto-set by BioSTEAM)
 
 **WWT** (`bst.create_conventional_wastewater_treatment_system`, Humbird 2011 configuration) receives:
 - `F.WW_10` — aqueous raffinate from EtOAc LLE (Area 300)
-- `F.WastePulp` — water/EtOAc bleed from CENT203 decanter (Area 300)
+- `F.WastePulp` — decanter water bleed (Area 300); predominantly water, 5% EtOAc
 - `F.RCF_WW` — combined RCF wastewater (Area 200)
 
-**Adding more streams in the future:**
+The internal `SludgeCentrifuge` (S603) is patched after creation in `ligsaf_utilities_system.py`:
+
+```python
+for unit in WWT.units:
+    if hasattr(unit, 'strict_moisture_content'):
+        unit.strict_moisture_content = False   # ← change here to re-enable strict mode
+    # To also change the target moisture fraction (default 0.79):
+    # if hasattr(unit, 'moisture_content'):
+    #     unit.moisture_content = 0.6
+```
+
+The Humbird 79% moisture target was calibrated for cellulosic-ethanol organic loadings. RCF wastewater has a different organic profile (`Acetate` is non-digestable; `G_Dimer`/`S_Oligomer`/`G_Oligomer` have no molecular formula and are skipped by `get_digestable_organic_chemicals`), which can make the strict target infeasible. Set `strict_moisture_content=True` once WWT stream chemistry is validated.
+
+**WWT outputs (currently unconnected):**
+
+| Slot | Stream | Description |
+|---|---|---|
+| `WWT.outs[0]` | biogas | CH4 + CO2 from anaerobic digestion |
+| `WWT.outs[1]` | sludge | dewatered biological sludge from S603 |
+| `WWT.outs[2]` | RO treated water | clean permeate from reverse osmosis |
+| `WWT.outs[3]` | brine | RO reject |
+
+The sludge and biogas can optionally be routed to BT as additional fuel. To implement, update `create_rcf_utilities_system()`:
+```python
+# Sludge → BT solid/liquid slot
+BT.ins[0] = WWT.outs[1]
+
+# Biogas + PSA purge → BT gas slot (needs a mixer since ins[1] is single-stream)
+gas_mixer = bst.Mixer('MIX_BT_gas', ins=(F.Purge_Light_Gases, WWT.outs[0]))
+BT.ins[1] = gas_mixer.outs[0]
+```
+And add `gas_mixer` to `facilities` before `BT` in the combined system:
+```python
+rcf_combined_system = bst.System(
+    'Combined_RCF_System',
+    path=(rcf_system, rcf_oil_purification_sys, WWT),
+    facilities=[gas_mixer, BT],
+)
+```
+
+**Adding more wastewater or fuel streams in the future:**
 
 For WWT, extend the `ins` tuple in `create_rcf_utilities_system()`:
 ```python
