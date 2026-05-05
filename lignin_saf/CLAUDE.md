@@ -260,7 +260,7 @@ If `ins=None`, `F.Purified_RCF_Oil` is taken from the main flowsheet — `rcf_oi
 | Unit ID | Variable Name | Type | Function | Key Parameters |
 |---|---|---|---|---|
 | MIX300 | `hexane_mixer` | Mixer | Mix fresh hexane makeup + hexane recycle | spec sets makeup = total required − recycle |
-| LLE300 | `lle_column` | MultiStageMixerSettlers | 3-stage countercurrent hexane/water LLE | N_stages=3, feed_stages=(0, −1); monomers/dimers partition to hexane extract; S_Oligomer/G_Oligomer unlisted → stay in raffinate (`WW_12`) |
+| LLE300 | `lle_column` | MultiStageMixerSettlers | 3-stage countercurrent hexane/water LLE | N_stages=3, feed_stages=(0, −1); true monomers (Propylguaiacol, Propylsyringol) partition to hexane extract; Syringaresinol (dimer), G_Dimer, S_Oligomer, G_Oligomer unlisted → stay in raffinate (`WW_12`) |
 | FLASH301 | `monomer_flash` | Flash | Evaporate hexane overhead; **`RCF_Monomers`** exits as bottoms | T=400 K, P=1 atm |
 | HX302 | `solvent_cooler` | HXutility | Condense hexane vapor | V=0, rigorous |
 | CENT303 | `solvent_decanter` | LiquidsSplitCentrifuge | Split hexane from water; hexane → `hexane_recycle` | Hexane split = 0.95 |
@@ -271,9 +271,9 @@ If `ins=None`, `F.Purified_RCF_Oil` is taken from the main flowsheet — `rcf_oi
 
 | Stream | Source | Description |
 |---|---|---|
-| `RCF_Monomers` | FLASH301 bottoms | Monomers and dimers (Propylguaiacol, Propylsyringol, Syringaresinol, G_Dimer); hexane removed |
+| `RCF_Monomers` | FLASH301 bottoms | True monomers only (Propylguaiacol, Propylsyringol); hexane removed |
 | `WW_11` | CENT303 second outlet | Water bleed from hexane decanter; to WWT |
-| `WW_12` | LLE300 raffinate (`lle_column.outs[1]`) | Aqueous raffinate containing S_Oligomer and G_Oligomer; routed directly to WWT. **Future:** if the system boundary expands to include oligomer upgrading, this stream should be cleaned (e.g. flashed to remove residual hexane) before being routed to WWT or fed to an upgrading unit. |
+| `WW_12` | LLE300 raffinate (`lle_column.outs[1]`) | Aqueous raffinate containing Syringaresinol (dimer), G_Dimer, S_Oligomer, and G_Oligomer; routed directly to WWT. **Future:** if the system boundary expands to include dimer/oligomer upgrading, this stream should be cleaned (e.g. flashed to remove residual hexane) before being routed to WWT or fed to an upgrading unit. |
 
 **Parameters (all in `ligsaf_settings.py` → `hexane_purification` dict):**
 
@@ -287,15 +287,19 @@ If `ins=None`, `F.Purified_RCF_Oil` is taken from the main flowsheet — `rcf_oi
 
 **Partition coefficients (`hexane_partition_IDs` / `hexane_partition_K` in `ligsaf_settings.py`):**
 
-K = c_extract (hexane-rich) / c_raffinate (water-rich). All values are placeholders. `S_Oligomer` and `G_Oligomer` are not listed — unlisted components default to the aqueous raffinate in `MultiStageMixerSettlers`.
+K = c_extract (hexane-rich) / c_raffinate (water-rich). All values are placeholders. `Syringaresinol`, `G_Dimer`, `S_Oligomer`, and `G_Oligomer` are not listed — unlisted components default to the aqueous raffinate in `MultiStageMixerSettlers`.
 
-| Component | K |
-|---|---|
-| Water | 0.01 (strongly prefers aqueous phase) |
-| Propylguaiacol | 2.0 (placeholder) |
-| Propylsyringol | 2.0 (placeholder) |
-| Syringaresinol | 2.0 (placeholder) |
-| G_Dimer | 2.0 (placeholder) |
+**Important:** `Syringaresinol` is a lignan DIMER (two sinapyl alcohol units linked via a β–β′ resinol linkage), not a monomer. It is intentionally excluded from the hexane partition data so it reports to `WW_12` alongside `G_Dimer`. Do not add it back as a listed component.
+
+| Component | K | Note |
+|---|---|---|
+| Water | 0.01 (strongly prefers aqueous phase) | listed |
+| Propylguaiacol | 2.0 (placeholder) | listed — true monomer |
+| Propylsyringol | 2.0 (placeholder) | listed — true monomer |
+| Syringaresinol | — | unlisted — dimer; stays in raffinate |
+| G_Dimer | — | unlisted — dimer; stays in raffinate |
+| S_Oligomer | — | unlisted — oligomer; stays in raffinate |
+| G_Oligomer | — | unlisted — oligomer; stays in raffinate |
 
 ## Utilities System (Area 400 + 500)
 
@@ -351,7 +355,7 @@ for unit in WWT.units:
 
 **Why this is needed:** The Humbird 79% moisture target was calibrated for cellulosic-ethanol organic loadings. RCF wastewater has a different organic profile:
 - `Acetate` is in `non_digestables` → passes through the bioreactors unreacted and accumulates in the S603 feed, reducing available free water
-- `G_Dimer`, `S_Oligomer`, `G_Oligomer` now have molecular formulas in `ligsaf_chemicals.py` and are included in `get_digestable_organic_chemicals`. `G_Dimer` is fully captured in `RCF_Monomers` via the hexane LLE (K=2.0) and does not reach WWT. `S_Oligomer` and `G_Oligomer` are unlisted in the hexane LLE partition data — they exit LLE300 as `WW_12` and do reach WWT, where they are treated as digestable organics (→ biogas → `BT.ins[1]`; sludge → `BT.ins[0]`)
+- `G_Dimer`, `S_Oligomer`, `G_Oligomer` now have molecular formulas in `ligsaf_chemicals.py` and are included in `get_digestable_organic_chemicals`. All three, plus `Syringaresinol` (a dimer), are unlisted in the hexane LLE partition data — they exit LLE300 as `WW_12` and reach WWT, where they are treated as digestable organics (→ biogas → `BT.ins[1]`; sludge → `BT.ins[0]`)
 
 The primary cause of the infeasibility is Acetate accumulation. `strict_moisture_content=False` lets the centrifuge use whatever water is available without raising `InfeasibleRegion`. Set it back to `True` once WWT stream chemistry is validated against experimental RCF wastewater data.
 
@@ -379,7 +383,7 @@ BioSTEAM's BT auto-derives combustion reactions from a chemical's elemental form
 
 **`S_Oligomer` MW — resolved:** The explicit `MW=628.67` was removed; `S_Oligomer` is now defined with `formula='C33H40O11'` only, so thermosteam derives MW as ~612.67 Da and BT combustion produces no `Ash`. **Open question:** verify that `C33H40O11` is the correct structure against Bartling et al. Fig S8 — if the correct MW is 628.67, change the formula to `C33H40O12`.
 
-**Note on current process flows:** `G_Dimer` is fully recovered in `RCF_Monomers` via the hexane LLE (K=2.0) and does not reach BT. `S_Oligomer` and `G_Oligomer` are unlisted in the hexane LLE partition data and exit LLE300 as `WW_12` → WWT → biogas/sludge → BT; their combustion reactions are therefore active. The `G_Dimer` combustion reaction is defined as a safeguard in case it appears in a waste stream in the future.
+**Note on current process flows:** `Syringaresinol` (a dimer), `G_Dimer`, `S_Oligomer`, and `G_Oligomer` are all unlisted in the hexane LLE partition data and exit LLE300 as `WW_12` → WWT → biogas/sludge → BT; their combustion reactions are therefore active. Only true monomers (Propylguaiacol, Propylsyringol) partition to the hexane extract and exit as `RCF_Monomers`.
 
 **Extending BT and WWT with more streams:**
 - WWT: add streams to the `ins` tuple inside `create_rcf_utilities_system()`.

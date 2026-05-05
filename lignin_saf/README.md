@@ -110,7 +110,7 @@ for unit in WWT.units:
     #     unit.moisture_content = 0.6
 ```
 
-The Humbird 79% moisture target was calibrated for cellulosic-ethanol organic loadings. RCF wastewater has a different organic profile: `Acetate` is in `non_digestables` and passes through the bioreactors unreacted, accumulating in the S603 feed and reducing the available free water. `G_Dimer`, `S_Oligomer`, and `G_Oligomer` now have molecular formulas (added to `ligsaf_chemicals.py`) and are therefore included in `get_digestable_organic_chemicals`. `G_Dimer` is fully captured in `RCF_Monomers` via the hexane LLE (K=2.0) and does not reach WWT. `S_Oligomer` and `G_Oligomer` are unlisted in the hexane LLE partition data and exit LLE300 as the aqueous raffinate `WW_12` — they do reach WWT and are treated as digestable organics, contributing to biogas (`→ BT.ins[1]`) and sludge (`→ BT.ins[0]`). The primary remaining cause of the infeasibility is the Acetate accumulation. Set `strict_moisture_content=True` once WWT stream chemistry is validated against experimental RCF wastewater data.
+The Humbird 79% moisture target was calibrated for cellulosic-ethanol organic loadings. RCF wastewater has a different organic profile: `Acetate` is in `non_digestables` and passes through the bioreactors unreacted, accumulating in the S603 feed and reducing the available free water. `G_Dimer`, `S_Oligomer`, and `G_Oligomer` now have molecular formulas (added to `ligsaf_chemicals.py`) and are therefore included in `get_digestable_organic_chemicals`. All three, plus `Syringaresinol` (a lignan dimer — two sinapyl alcohol units linked via a β–β′ resinol linkage), are unlisted in the hexane LLE partition data and exit LLE300 as the aqueous raffinate `WW_12` — they reach WWT and are treated as digestable organics, contributing to biogas (`→ BT.ins[1]`) and sludge (`→ BT.ins[0]`). Only true monomers (Propylguaiacol, Propylsyringol) partition into the hexane extract and exit as `RCF_Monomers`. The primary remaining cause of the infeasibility is the Acetate accumulation. Set `strict_moisture_content=True` once WWT stream chemistry is validated against experimental RCF wastewater data.
 
 **WWT outputs:**
 
@@ -136,7 +136,7 @@ BioSTEAM's BT auto-derives combustion reactions from a chemical's elemental form
 
 **`S_Oligomer` MW — resolved:** The explicit `MW=628.67` parameter was removed; `S_Oligomer` is now defined with `formula='C33H40O11'` only, so thermosteam derives MW as ~612.67 Da and BT combustion is clean (no `Ash` term). **Open question:** confirm that `C33H40O11` (612.67 Da) is the correct molecular identity against Bartling et al. Fig S8 — if the correct structure has MW 628.67, change the formula to `C33H40O12`.
 
-**Note on current process flows:** `G_Dimer` is fully recovered in `RCF_Monomers` via the hexane LLE (K=2.0) and does not reach BT. `S_Oligomer` and `G_Oligomer` are unlisted in the hexane LLE partition data and exit LLE300 as `WW_12` → WWT → biogas/sludge → BT; their combustion reactions are therefore active. The `G_Dimer` combustion reaction is defined as a safeguard in case it appears in a waste stream in the future.
+**Note on current process flows:** `Syringaresinol` (a dimer), `G_Dimer`, `S_Oligomer`, and `G_Oligomer` are all unlisted in the hexane LLE partition data and exit LLE300 as `WW_12` → WWT → biogas/sludge → BT; their combustion reactions are therefore active. Only true monomers (Propylguaiacol, Propylsyringol) partition to the hexane extract and exit as `RCF_Monomers`.
 
 **Adding more wastewater or fuel streams in the future:**
 

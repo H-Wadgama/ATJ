@@ -170,8 +170,11 @@ hexane_purification = {
 # Placeholder values — replace with experimental LLE data when available
 # NOTE: Water K = 0.01 is a placeholder; physically water strongly prefers the aqueous
 #       raffinate (K << 1 expected). Update this when real data are available.
-# S_Oligomer and G_Oligomer are not listed — unlisted components stay in the raffinate by default.
+# S_Oligomer, G_Oligomer, G_Dimer, and Syringaresinol are not listed — unlisted components stay in
+# the raffinate by default. Syringaresinol is a lignan DIMER (two sinapyl alcohol units linked via
+# β–β′ resinol linkage) and is intentionally excluded from the monomer extract.
+# Only true monomers (Propylguaiacol, Propylsyringol) partition into the hexane extract.
 hexane_partition_IDs = (
-    'Water', 'Propylguaiacol', 'Propylsyringol', 'Syringaresinol', 'G_Dimer',
+    'Water', 'Propylguaiacol', 'Propylsyringol',
 )
-hexane_partition_K = (0.01, 2.0, 2.0, 2.0, 2.0)
+hexane_partition_K = (0.01, 2.0, 2.0)

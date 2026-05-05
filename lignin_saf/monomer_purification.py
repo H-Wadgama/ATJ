@@ -15,9 +15,13 @@ def create_monomer_purification_system(ins=None):
     Build and return the hexane LLE monomer purification system.
 
     Separates the purified RCF oil (output of EtOAc LLE FLASH201) into
-    monomers/dimers via hexane liquid-liquid extraction. Oligomers (S_Oligomer,
-    G_Oligomer) are not assigned partition coefficients and remain in the
-    aqueous raffinate, which is flashed to recover them as RCF_Oligomers.
+    true monomers via hexane liquid-liquid extraction. Dimers (Syringaresinol,
+    G_Dimer) and oligomers (S_Oligomer, G_Oligomer) are not assigned partition
+    coefficients and remain in the aqueous raffinate (WW_12).
+
+    NOTE: Syringaresinol is a lignan DIMER (two sinapyl alcohol units linked via
+    a beta-beta' resinol linkage), not a monomer. It is intentionally excluded
+    from the hexane partition data so it reports to WW_12 alongside G_Dimer.
 
     Parameters
     ----------
@@ -38,9 +42,9 @@ def create_monomer_purification_system(ins=None):
         bst.settings.CEPCI = 541.7
 
     Key output streams (accessible via F.<name> after simulate()):
-        RCF_Monomers   — bottoms of FLASH301; monomers and dimers in hexane-extracted fraction
+        RCF_Monomers   — bottoms of FLASH301; true monomers only (Propylguaiacol, Propylsyringol)
         WW_11          — water bleed from CENT303 hexane decanter; to wastewater treatment
-        WW_12          — aqueous raffinate from LLE300; to wastewater treatment
+        WW_12          — aqueous raffinate from LLE300; contains Syringaresinol, G_Dimer, S_Oligomer, G_Oligomer; to WWT
     """
     purified_rcf = F.Purified_RCF_Oil if ins is None else ins
 
@@ -90,8 +94,9 @@ def create_monomer_purification_system(ins=None):
             - recycle.imass['Water']
         )
 
-    # LLE: purified oil contacts hexane/water countercurrently; monomers and dimers
-    # partition into hexane extract; oligomers (unlisted) remain in aqueous raffinate
+    # LLE: purified oil contacts hexane/water countercurrently; only true monomers
+    # (Propylguaiacol, Propylsyringol) partition into hexane extract; Syringaresinol
+    # (a dimer), G_Dimer, S_Oligomer, and G_Oligomer are unlisted → stay in raffinate
     lle_column = bst.MultiStageMixerSettlers(
         'LLE300',
         ins=(purified_rcf, hexane_mixer-0),
