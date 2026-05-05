@@ -113,7 +113,7 @@ def create_rcf_system(ins=None):
     solvolysis_reactor = SolvolysisReactor(
         'RCF103_S',
         ins=(ins, meoh_heater-0),
-        outs=('Carbohydrate_Pulp', 'Solvolysis_Liquor'),
+        outs=('Wet_Pulp', 'Solvolysis_Liquor'),
         T=rcf_conditions['T'],
         P=rcf_conditions['P'],
         tau=rcf_conditions['tau_s'],               # 3 hr time on stream per batch
@@ -215,6 +215,9 @@ def create_rcf_system(ins=None):
     wastewater_mixer = bst.Mixer(
         ins=(meoh_purifier_col.outs[1], water_remover.outs[0]), outs='RCF_WW'
     )
+    
+    pulp_purifier = bst.Flash('D601', solvolysis_reactor.outs[0], outs=('', 'Carbohydrate_Pulp'), T=400, P=1e5)
+
 
     catalyst = bst.Stream(
         'RCF_Catalyst',
@@ -231,7 +234,7 @@ def create_rcf_system(ins=None):
             h2_mixer, h2_pre_heat, hydrogenolysis_reactor,
             R102, pre_psa_pump, pre_psa_flash, pre_psa_heater,
             psa_system, h2_pump, crude_distillation, meoh_purifier_col,
-            meoh_mixer, cooler_2, water_remover, wastewater_mixer,
+            meoh_mixer, cooler_2, water_remover, wastewater_mixer, pulp_purifier,
             catalyst_stream,
         ),
         recycle=(meoh_recycle, hydrogen_recycle),

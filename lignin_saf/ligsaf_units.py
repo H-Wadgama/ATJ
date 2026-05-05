@@ -298,14 +298,15 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
 
         self.reaction_1(used_biomass) 
         self.reaction_2(used_solvent)
-        
+
 
         solubilized_lignin = used_biomass.imass['SolubleLignin'] 
         used_solvent.imass['l', 'SolubleLignin'] += solubilized_lignin      # Soluble lignin dissolves in solvent effluent stream 
         used_biomass.imass['SolubleLignin'] = 0                             # No soluble lignin remaining in biomass (assuming 100% extraction efficiency)
 
-        trace_solvent = used_solvent.imass['Methanol']
-        used_biomass.imass['Methanol'] = trace_solvent*0.01
+        for chem in solvent.chemicals:
+            if solvent.imass[chem.ID] > 0:
+                used_biomass.imass[chem.ID] = solvent.imass[chem.ID] * 0.005
 
 
         extractives = used_biomass.imass['Extract']                         # From Table S1 https://www.rsc.org/suppdata/d1/gc/d1gc01591e/d1gc01591e1.pdf,
