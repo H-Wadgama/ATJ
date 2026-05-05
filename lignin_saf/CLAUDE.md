@@ -351,7 +351,7 @@ for unit in WWT.units:
 
 **Why this is needed:** The Humbird 79% moisture target was calibrated for cellulosic-ethanol organic loadings. RCF wastewater has a different organic profile:
 - `Acetate` is in `non_digestables` → passes through the bioreactors unreacted and accumulates in the S603 feed, reducing available free water
-- `G_Dimer`, `S_Oligomer`, `G_Oligomer` now have molecular formulas in `ligsaf_chemicals.py` and are included in `get_digestable_organic_chemicals`, but in the current configuration all three are fully captured in `Purified_RCF_Oil` and do not reach WWT
+- `G_Dimer`, `S_Oligomer`, `G_Oligomer` now have molecular formulas in `ligsaf_chemicals.py` and are included in `get_digestable_organic_chemicals`. `G_Dimer` is fully captured in `RCF_Monomers` via the hexane LLE (K=2.0) and does not reach WWT. `S_Oligomer` and `G_Oligomer` are unlisted in the hexane LLE partition data — they exit LLE300 as `WW_12` and do reach WWT, where they are treated as digestable organics (→ biogas → `BT.ins[1]`; sludge → `BT.ins[0]`)
 
 The primary cause of the infeasibility is Acetate accumulation. `strict_moisture_content=False` lets the centrifuge use whatever water is available without raising `InfeasibleRegion`. Set it back to `True` once WWT stream chemistry is validated against experimental RCF wastewater data.
 
@@ -379,7 +379,7 @@ BioSTEAM's BT auto-derives combustion reactions from a chemical's elemental form
 
 **`S_Oligomer` MW — resolved:** The explicit `MW=628.67` was removed; `S_Oligomer` is now defined with `formula='C33H40O11'` only, so thermosteam derives MW as ~612.67 Da and BT combustion produces no `Ash`. **Open question:** verify that `C33H40O11` is the correct structure against Bartling et al. Fig S8 — if the correct MW is 628.67, change the formula to `C33H40O12`.
 
-**Note on current process flows:** In the current configuration, `G_Dimer`, `S_Oligomer`, and `G_Oligomer` are fully recovered in `Purified_RCF_Oil` via EtOAc LLE and do not reach BT (`BT.ins[0]` and `BT.ins[1]` show zero flow for all three after simulation). The combustion reactions are defined as a safeguard in case any oligomers appear in a waste stream in the future.
+**Note on current process flows:** `G_Dimer` is fully recovered in `RCF_Monomers` via the hexane LLE (K=2.0) and does not reach BT. `S_Oligomer` and `G_Oligomer` are unlisted in the hexane LLE partition data and exit LLE300 as `WW_12` → WWT → biogas/sludge → BT; their combustion reactions are therefore active. The `G_Dimer` combustion reaction is defined as a safeguard in case it appears in a waste stream in the future.
 
 **Extending BT and WWT with more streams:**
 - WWT: add streams to the `ins` tuple inside `create_rcf_utilities_system()`.
