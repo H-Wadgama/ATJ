@@ -216,6 +216,7 @@ def create_rcf_system(ins=None):
         ins=(meoh_purifier_col.outs[1], water_remover.outs[0]), outs='RCF_WW'
     )
     
+      # outs[0]: evaporated MeOH/water from pulp — currently unrecovered (future: route to WWT or solvent recovery)
     pulp_purifier = bst.Flash('D601', solvolysis_reactor.outs[0], outs=('', 'Carbohydrate_Pulp'), T=400, P=1e5)
 
 

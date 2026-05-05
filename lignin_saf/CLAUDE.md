@@ -11,7 +11,7 @@ rcf_system = bst.System('RCF_System',
     path=(meoh_h2o_mix, meoh_pump, meoh_heater, solvolysis_reactor, h2_mixer, h2_pre_heat,
           hydrogenolysis_reactor, R102, pre_psa_pump, pre_psa_flash, pre_psa_heater,
           psa_system, h2_pump, crude_distillation, meoh_purifier_col, meoh_mixer, cooler_2,
-          water_remover, wastewater_mixer, catalyst_stream),
+          water_remover, pulp_purifier, wastewater_mixer, catalyst_stream),
     recycle=(meoh_recycle, hydrogen_recycle))
 ```
 
@@ -45,6 +45,7 @@ rcf_system = bst.System('RCF_System',
 | MIX116 | `meoh_mixer` | Mixer | Combine purified MeOH + FLASH109 condensate | — |
 | HX117 | `cooler_2` | HXutility (cooler) | Cool MeOH → `meoh_recycle` | V=0 (saturated liquid), rigorous |
 | FLASH118 | `water_remover` | Flash | Separate water from crude RCF oil | T=400 K, P=1 atm |
+| D601 | `pulp_purifier` | Flash | Flash-dry `Wet_Pulp`; remove residual MeOH/water before `Carbohydrate_Pulp` exits | T=400 K, P=1 atm; `outs[1]` = `Carbohydrate_Pulp`; `outs[0]` vapor currently unrecovered (future: route to WWT or solvent recovery) |
 | — | `wastewater_mixer` | Mixer | Combine all wastewater → `RCF_WW` | — |
 | — | `catalyst_stream` | `CatalystMixer` (custom) | Track NiC catalyst replacement cost | 0.1 kg/kg dry biomass, replaced 1×/year |
 
@@ -64,9 +65,20 @@ Recycle specs: fresh feed in each mixer is adjusted so that `fresh + recycle = r
 | Stream | Source Unit | Description | Downstream |
 |---|---|---|---|
 | `RCF_Oil` | `water_remover` (FLASH118) | Crude lignin oil: 50% monomers, 25% dimers, 25% oligomers; C5–C15 range | → `rcf_oil_purification_sys` (EtOAc LLE) |
-| `Carbohydrate_Pulp` | `solvolysis_reactor` (RCF103_S) | Cellulose-rich pulp, 90% cellulose retention | → `etoh_system` (cellulosic ethanol) |
+| `Carbohydrate_Pulp` | `pulp_purifier` (D601) | Cellulose-rich pulp, 90% cellulose retention; residual MeOH/water removed | → `etoh_system` (cellulosic ethanol) |
 | `RCF_WW` | `wastewater_mixer` | Combined wastewater (light organics, unconverted solvent) | → wastewater treatment |
 | `Purge_Light_Gases` | `psa_system` (PSA111) | Non-H₂ light gases | purged / flared |
+
+## Open implementation items
+
+**`pulp_purifier` vapor outlet (D601, `outs[0]`):** The flash overhead contains evaporated MeOH and water stripped from the biomass pulp. It is currently unconnected — the solvent is not recovered. A future implementation should route this stream to `wastewater_mixer` (for WWT) or to a dedicated solvent recovery unit. When doing so, move `pulp_purifier` before `wastewater_mixer` in the path and add `pulp_purifier.outs[0]` to `wastewater_mixer.ins`.
+
+**`SolvolysisReactor._run()` solvent retention — hardcoded to `('Methanol', 'Water')`:** The loop that deposits a small fraction of solvent into the biomass stream is:
+```python
+for chem_id in ('Methanol', 'Water'):
+    used_biomass.imass[chem_id] = used_solvent.imass[chem_id] * 0.005
+```
+This was restricted from a generic `for chem in solvent.chemicals` loop (which caused trace gases — CH4, CO, H2 — to accumulate in the pulp via the MeOH recycle) to explicitly name only the solvent components. If the solvent system is changed in the future (e.g. to ethanol/water, THF/water), this tuple must be updated to match the new solvent identity.
 
 ## Process Conditions (from ligsaf_settings.py)
 

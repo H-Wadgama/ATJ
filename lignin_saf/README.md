@@ -45,7 +45,7 @@ Both scripts follow the same pattern: set up thermodynamics, call the factory fu
 
 The proposed process areas are:
 Area 100: Feed storage and handling
-Area 200: RCF (reductive catalytic fractionation — solvolysis + hydrogenolysis + solvent recovery)
+Area 200: RCF (reductive catalytic fractionation — solvolysis + hydrogenolysis + solvent recovery + pulp drying)
 Area 300: Products recovery (EtOAc liquid–liquid extraction → purified lignin oil)
 Area 400: Wastewater treatment
 Area 500: Combustor, boiler and turbogenerator
@@ -153,7 +153,18 @@ BT.ins[0] = solid_mixer.outs[0]
 ```
 
 
-The main process assumptions:
+## Open implementation items
+
+**Pulp purifier vapor recovery (D601):** `pulp_purifier` (Flash D601, T=400 K, P=1 atm) strips residual methanol and water from the `Wet_Pulp` before the `Carbohydrate_Pulp` stream exits Area 200. The vapor overhead (`outs[0]`) is currently unrecovered — it represents lost solvent not yet accounted for in WWT. A future implementation should route this stream to wastewater treatment or to a dedicated solvent recovery step.
+
+**Solvolysis reactor solvent retention — hardcoded to methanol/water:** `SolvolysisReactor._run()` in `ligsaf_units.py` deposits 0.5% of the solvent flow into the biomass outlet for MeOH and Water only:
+```python
+for chem_id in ('Methanol', 'Water'):
+    used_biomass.imass[chem_id] = used_solvent.imass[chem_id] * 0.005
+```
+The original generic loop (iterating over all chemicals) caused trace gases — CH4, CO, H2 — accumulated in the MeOH recycle to appear in the carbohydrate pulp. The explicit tuple is the current fix. If the solvent is changed from methanol/water in the future, this tuple must be updated to match the new solvent identity.
+
+## The main process assumptions:
 _The loss of carbohydrate retention in biomass pulp post RCF is due to solvent dissolution_: Carbohydrate retention can decrease due to solvent dissolution or  reaction within the solvent [1](https://pubs.rsc.org/en/content/articlelanding/2021/ee/d0ee02870c). Here we assume that the carbohydrates are only solubilized and are not reacting with the solvent. 
 
 
