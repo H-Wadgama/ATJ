@@ -96,6 +96,8 @@ rcf_combined_system.simulate()
 - `F.WW_10` — aqueous raffinate from EtOAc LLE (Area 300)
 - `F.WastePulp` — decanter water bleed (Area 300); predominantly water, 5% EtOAc
 - `F.RCF_WW` — combined RCF wastewater (Area 200)
+- `F.WW_11` — water bleed from hexane decanter CENT303 (Area 300)
+- `F.WW_12` — aqueous raffinate from hexane LLE300 (Area 300); contains S_Oligomer and G_Oligomer since these are not assigned hexane partition coefficients
 
 The internal `SludgeCentrifuge` (S603) is patched after creation in `ligsaf_utilities_system.py`:
 

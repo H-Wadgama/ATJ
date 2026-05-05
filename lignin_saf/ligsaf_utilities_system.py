@@ -34,7 +34,7 @@ def create_rcf_utilities_system():
 
     WWT = bst.create_conventional_wastewater_treatment_system(
         'WWT',
-        ins=(F.WW_10, F.WastePulp, F.RCF_WW),
+        ins=(F.WW_10, F.WastePulp, F.RCF_WW, F.WW_11, F.WW_12),
     )
     # The Humbird WWT sludge centrifuge targets 79% moisture calibrated for
     # cellulosic-ethanol-scale organic loadings. RCF wastewater has a different

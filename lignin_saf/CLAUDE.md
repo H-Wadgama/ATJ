@@ -260,11 +260,10 @@ If `ins=None`, `F.Purified_RCF_Oil` is taken from the main flowsheet — `rcf_oi
 | Unit ID | Variable Name | Type | Function | Key Parameters |
 |---|---|---|---|---|
 | MIX300 | `hexane_mixer` | Mixer | Mix fresh hexane makeup + hexane recycle | spec sets makeup = total required − recycle |
-| LLE300 | `lle_column` | MultiStageMixerSettlers | 3-stage countercurrent hexane/water LLE | N_stages=3, feed_stages=(0, −1); monomers/dimers partition to hexane extract; S_Oligomer/G_Oligomer unlisted → stay in raffinate |
+| LLE300 | `lle_column` | MultiStageMixerSettlers | 3-stage countercurrent hexane/water LLE | N_stages=3, feed_stages=(0, −1); monomers/dimers partition to hexane extract; S_Oligomer/G_Oligomer unlisted → stay in raffinate (`WW_12`) |
 | FLASH301 | `monomer_flash` | Flash | Evaporate hexane overhead; **`RCF_Monomers`** exits as bottoms | T=400 K, P=1 atm |
 | HX302 | `solvent_cooler` | HXutility | Condense hexane vapor | V=0, rigorous |
 | CENT303 | `solvent_decanter` | LiquidsSplitCentrifuge | Split hexane from water; hexane → `hexane_recycle` | Hexane split = 0.95 |
-| FLASH304 | `raffinate_flash` | Flash | Flash LLE raffinate; **`RCF_Oligomers`** exits as bottoms | T=400 K, P=1 atm |
 
 **Recycle:** `hexane_recycle` (CENT303 → MIX300). Fresh hexane makeup computed by the `adjust_fresh_solvent_flow` spec on every iteration.
 
@@ -273,9 +272,8 @@ If `ins=None`, `F.Purified_RCF_Oil` is taken from the main flowsheet — `rcf_oi
 | Stream | Source | Description |
 |---|---|---|
 | `RCF_Monomers` | FLASH301 bottoms | Monomers and dimers (Propylguaiacol, Propylsyringol, Syringaresinol, G_Dimer); hexane removed |
-| `RCF_Oligomers` | FLASH304 bottoms | Oligomers (S_Oligomer, G_Oligomer) recovered from aqueous raffinate |
 | `WW_11` | CENT303 second outlet | Water bleed from hexane decanter; to WWT |
-| `WW_21` | FLASH304 overhead | Water overhead from raffinate flash; to WWT |
+| `WW_12` | LLE300 raffinate (`lle_column.outs[1]`) | Aqueous raffinate containing S_Oligomer and G_Oligomer; routed directly to WWT. **Future:** if the system boundary expands to include oligomer upgrading, this stream should be cleaned (e.g. flashed to remove residual hexane) before being routed to WWT or fed to an upgrading unit. |
 
 **Parameters (all in `ligsaf_settings.py` → `hexane_purification` dict):**
 
@@ -286,7 +284,6 @@ If `ins=None`, `F.Purified_RCF_Oil` is taken from the main flowsheet — `rcf_oi
 | `N_stages` | 3 | Extraction stages |
 | `hexane_recycle_split` | 0.95 | Fraction of hexane recovered in centrifuge |
 | `oil_flash_T` | 400 K | Flash T to evaporate hexane from monomer extract |
-| `raffinate_flash_T` | 400 K | Flash T to separate oligomers from raffinate water |
 
 **Partition coefficients (`hexane_partition_IDs` / `hexane_partition_K` in `ligsaf_settings.py`):**
 
@@ -336,6 +333,8 @@ Combines PSA purge gas and WWT biogas before the BT gas combustion slot. Listed 
 | `F.WW_10` | LLE200 raffinate (Area 300) — predominantly water |
 | `F.WastePulp` | CENT203 decanter bleed (Area 300) — predominantly water + 5% EtOAc |
 | `F.RCF_WW` | Combined RCF wastewater (Area 200) |
+| `F.WW_11` | CENT303 hexane decanter bleed (Area 300) — water bleed from hexane recycle |
+| `F.WW_12` | LLE300 aqueous raffinate (Area 300) — contains S_Oligomer and G_Oligomer; routed directly to WWT. Future: clean before WWT if oligomer upgrading is added. |
 
 Note: `WastePulp` is predominantly water. In `CENT203`, `split={'EthylAcetate': 0.95}` means Water defaults to split=0.0 (all water → `outs[1]` = WastePulp). Only 5% of EtOAc ends up in WastePulp.
 

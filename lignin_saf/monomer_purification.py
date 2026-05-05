@@ -39,9 +39,8 @@ def create_monomer_purification_system(ins=None):
 
     Key output streams (accessible via F.<name> after simulate()):
         RCF_Monomers   — bottoms of FLASH301; monomers and dimers in hexane-extracted fraction
-        RCF_Oligomers  — bottoms of FLASH304; oligomers recovered from raffinate
         WW_11          — water bleed from CENT303 hexane decanter; to wastewater treatment
-        WW_21          — overhead of FLASH304 raffinate flash; to wastewater treatment
+        WW_12          — aqueous raffinate from LLE300; to wastewater treatment
     """
     purified_rcf = F.Purified_RCF_Oil if ins is None else ins
 
@@ -53,8 +52,6 @@ def create_monomer_purification_system(ins=None):
     recycle_split       = hexane_purification['hexane_recycle_split']
     oil_flash_T         = hexane_purification['oil_flash_T']
     oil_flash_P         = hexane_purification['oil_flash_P']
-    raffinate_flash_T   = hexane_purification['raffinate_flash_T']
-    raffinate_flash_P   = hexane_purification['raffinate_flash_P']
 
     hexane_rho = chems['Hexane'].rho(phase='l', T=298.15, P=101325)
     water_rho  = chems['Water'].rho(phase='l', T=298.15, P=101325)
@@ -98,7 +95,7 @@ def create_monomer_purification_system(ins=None):
     lle_column = bst.MultiStageMixerSettlers(
         'LLE300',
         ins=(purified_rcf, hexane_mixer-0),
-        outs=('', ''),
+        outs=('', 'WW_12'),
         feed_stages=(0, -1),
         N_stages=N_stages,
         partition_data=partition_data,
@@ -130,18 +127,9 @@ def create_monomer_purification_system(ins=None):
         split={'Hexane': recycle_split},
     )
 
-    # Flash raffinate to separate oligomers from wastewater; overhead water to WWT
-    raffinate_flash = bst.units.Flash(
-        'FLASH304',
-        ins=lle_column-1,
-        outs=('WW_21', 'RCF_Oligomers'),
-        T=raffinate_flash_T,
-        P=raffinate_flash_P,
-    )
-
     # ── Assemble system ───────────────────────────────────────────────────────
     return bst.System(
         'Monomer_Purification_System',
-        path=(hexane_mixer, lle_column, monomer_flash, solvent_cooler, solvent_decanter, raffinate_flash),
+        path=(hexane_mixer, lle_column, monomer_flash, solvent_cooler, solvent_decanter),
         recycle=hexane_recycle,
     )
