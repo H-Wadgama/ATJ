@@ -59,7 +59,8 @@ Current design includes Area 200, 300, 400, and 500. Areas 100, 600, and 700 are
 | File | Role |
 |---|---|
 | `ligsaf_system.py` | `create_rcf_system(ins=None)` — Area 200 factory function |
-| `ligsaf_purification_system.py` | `create_rcf_oil_purification_system(ins=None)` — Area 300 factory function |
+| `ligsaf_purification_system.py` | `create_rcf_oil_purification_system(ins=None)` — Area 300 EtOAc LLE factory function |
+| `monomer_purification.py` | `create_monomer_purification_system(ins=None)` — Area 300 hexane LLE monomer/dimer separation factory function |
 | `ligsaf_utilities_system.py` | `create_rcf_utilities_system()` — Area 400 + 500 factory function; returns `(BT, WWT, gas_mixer)` |
 | `ligsaf_units.py` | Custom BioSTEAM unit classes: `SolvolysisReactor`, `HydrogenolysisReactor`, `PSA`, `CatalystMixer` |
 | `ligsaf_settings.py` | All process parameters, prices, biomass composition, partition coefficients |
@@ -125,13 +126,13 @@ BioSTEAM's BT auto-derives combustion reactions from a chemical's elemental form
 | Chemical | Formula | BT combustion reaction | Status |
 |---|---|---|---|
 | `G_Dimer` | `C20H26O6` | `23.5 O2 + G_Dimer → 13 Water + 20 CO2` | correct |
-| `S_Oligomer` | `C33H40O11` | `37.5 O2 + S_Oligomer → 20 Water + 33 CO2 + 16 Ash` | **MW mismatch — see below** |
+| `S_Oligomer` | `C33H40O11` | `37.5 O2 + S_Oligomer → 33 CO2 + 20 Water` | resolved — explicit MW removed; MW now formula-derived (~612.67 Da) |
 | `G_Oligomer` | `C31H40O8` | `37 O2 + G_Oligomer → 20 Water + 31 CO2` | correct |
 | `Propylguaiacol` | `C10H14O2` | combusts correctly | correct |
 | `Propylsyringol` | `C11H16O3` | combusts correctly | correct |
 | `Syringaresinol` | `C22H26O8` | combusts correctly | correct |
 
-**`S_Oligomer` MW mismatch (needs fix):** `formula='C33H40O11'` gives a formula-derived MW of 612.67 Da, but the chemical is defined with `MW=628.67`. The ~16 Da gap cannot be attributed to any element in the formula, so BioSTEAM assigns it to inert `Ash` in the combustion products. To fix, either correct the formula to match 628.67 (e.g. `C33H40O12` → 628.67) or correct `MW` to 612.67 to match `C33H40O11`.
+**`S_Oligomer` MW — resolved:** The explicit `MW=628.67` parameter was removed; `S_Oligomer` is now defined with `formula='C33H40O11'` only, so thermosteam derives MW as ~612.67 Da and BT combustion is clean (no `Ash` term). **Open question:** confirm that `C33H40O11` (612.67 Da) is the correct molecular identity against Bartling et al. Fig S8 — if the correct structure has MW 628.67, change the formula to `C33H40O12`.
 
 **Note on current process flows:** In the current configuration, `G_Dimer`, `S_Oligomer`, and `G_Oligomer` are fully recovered in `Purified_RCF_Oil` via EtOAc LLE and do not reach BT (`BT.ins[0]` and `BT.ins[1]` show zero flow for all three after simulation). The combustion reactions are defined as a safeguard in case any oligomers appear in a waste stream in the future.
 

@@ -2,6 +2,7 @@ from lignin_saf.ligsaf_chemicals import create_chemicals
 from lignin_saf.ligsaf_settings import feed_parameters
 from lignin_saf.ligsaf_system import create_rcf_system
 from lignin_saf.ligsaf_purification_system import create_rcf_oil_purification_system
+from lignin_saf.monomer_purification import create_monomer_purification_system
 from lignin_saf.ligsaf_utilities_system import create_rcf_utilities_system
 from cellulosic_tea import create_cellulosic_ethanol_tea
 from biosteam import main_flowsheet as F
@@ -30,17 +31,21 @@ rcf_system = create_rcf_system(ins=poplar_in)
 rcf_system.simulate()
 
 rcf_oil_purification_sys = create_rcf_oil_purification_system(ins=F.RCF_Oil)
+monomer_purification_sys = create_monomer_purification_system(ins=F.Purified_RCF_Oil)
 rcf_oil_purification_sys.simulate()
+monomer_purification_sys.simulate()
 BT, WWT, gas_mixer = create_rcf_utilities_system()
 
 
 
 rcf_combined_system = bst.System(
     'Combined_RCF_System',
-    path=(rcf_system, rcf_oil_purification_sys, WWT),
+    path=(rcf_system, rcf_oil_purification_sys, monomer_purification_sys, WWT),
     facilities=[gas_mixer, BT],
 )
 rcf_combined_system.simulate()
 rcf_combined_system.show()
 
-integrated_tea = create_cellulosic_ethanol_tea(rcf_combined_system)
+
+
+#integrated_tea = create_cellulosic_ethanol_tea(rcf_combined_system)

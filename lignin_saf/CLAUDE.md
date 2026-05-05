@@ -170,7 +170,7 @@ u = Q_per_reactor / (A × 3600)
 
 - `rcf_oil_purification_sys` — built by `create_rcf_oil_purification_system()` in `ligsaf_purification_system.py`; EtOAc LLE on `RCF_Oil` → `Purified_RCF_Oil`
 - `etoh_system` — cellulosic ethanol from `biorefineries.cellulosic`, fed by `Carbohydrate_Pulp`
-- `monomer_purification_sys` — hexane LLE for monomer/dimer separation (currently commented out pending K-value data)
+- `monomer_purification_sys` — hexane LLE for monomer/dimer separation; built by `create_monomer_purification_system()` in `monomer_purification.py`; K-values are placeholders (K=2.0 for all monomers) pending experimental hexane/water LLE data
 - `combined_sys` — full integrated system wrapping all of the above (330 days/yr × 24 hr)
 - `combined_sys_hx` — same with `HeatExchangerNetwork` (T_min_app=10°C)
 
@@ -230,6 +230,63 @@ K = c_extract (EtOAc-rich) / c_raffinate (water-rich). All values are placeholde
 | G_Dimer | 109 |
 | S_Oligomer | 200 |
 | G_Oligomer | 200 |
+
+## Monomer Purification System
+
+Built by `create_monomer_purification_system(ins=None)` in `monomer_purification.py`. Accepts `Purified_RCF_Oil` (bottoms of FLASH201) and separates monomers/dimers from oligomers via hexane liquid–liquid extraction.
+
+**Import pattern:**
+```python
+from lignin_saf.monomer_purification import create_monomer_purification_system
+monomer_purification_sys = create_monomer_purification_system(ins=F.Purified_RCF_Oil)
+monomer_purification_sys.simulate()
+```
+If `ins=None`, `F.Purified_RCF_Oil` is taken from the main flowsheet — `rcf_oil_purification_sys` must be simulated first.
+
+**Unit operations:**
+
+| Unit ID | Variable Name | Type | Function | Key Parameters |
+|---|---|---|---|---|
+| MIX300 | `hexane_mixer` | Mixer | Mix fresh hexane makeup + hexane recycle | spec sets makeup = total required − recycle |
+| LLE300 | `lle_column` | MultiStageMixerSettlers | 3-stage countercurrent hexane/water LLE | N_stages=3, feed_stages=(0, −1); monomers/dimers partition to hexane extract; S_Oligomer/G_Oligomer unlisted → stay in raffinate |
+| FLASH301 | `monomer_flash` | Flash | Evaporate hexane overhead; **`RCF_Monomers`** exits as bottoms | T=400 K, P=1 atm |
+| HX302 | `solvent_cooler` | HXutility | Condense hexane vapor | V=0, rigorous |
+| CENT303 | `solvent_decanter` | LiquidsSplitCentrifuge | Split hexane from water; hexane → `hexane_recycle` | Hexane split = 0.95 |
+| FLASH304 | `raffinate_flash` | Flash | Flash LLE raffinate; **`RCF_Oligomers`** exits as bottoms | T=400 K, P=1 atm |
+
+**Recycle:** `hexane_recycle` (CENT303 → MIX300). Fresh hexane makeup computed by the `adjust_fresh_solvent_flow` spec on every iteration.
+
+**Output streams:**
+
+| Stream | Source | Description |
+|---|---|---|
+| `RCF_Monomers` | FLASH301 bottoms | Monomers and dimers (Propylguaiacol, Propylsyringol, Syringaresinol, G_Dimer); hexane removed |
+| `RCF_Oligomers` | FLASH304 bottoms | Oligomers (S_Oligomer, G_Oligomer) recovered from aqueous raffinate |
+| `WW_11` | CENT303 second outlet | Water bleed from hexane decanter; to WWT |
+| `WW_21` | FLASH304 overhead | Water overhead from raffinate flash; to WWT |
+
+**Parameters (all in `ligsaf_settings.py` → `hexane_purification` dict):**
+
+| Parameter | Value | Notes |
+|---|---|---|
+| `solvent_to_oil_ratio` | 5 kg/kg | Hexane mass per kg purified RCF oil |
+| `water_hexane_ratio` | 1.0 v/v | Water : hexane volume ratio in solvent feed |
+| `N_stages` | 3 | Extraction stages |
+| `hexane_recycle_split` | 0.95 | Fraction of hexane recovered in centrifuge |
+| `oil_flash_T` | 400 K | Flash T to evaporate hexane from monomer extract |
+| `raffinate_flash_T` | 400 K | Flash T to separate oligomers from raffinate water |
+
+**Partition coefficients (`hexane_partition_IDs` / `hexane_partition_K` in `ligsaf_settings.py`):**
+
+K = c_extract (hexane-rich) / c_raffinate (water-rich). All values are placeholders. `S_Oligomer` and `G_Oligomer` are not listed — unlisted components default to the aqueous raffinate in `MultiStageMixerSettlers`.
+
+| Component | K |
+|---|---|
+| Water | 0.01 (strongly prefers aqueous phase) |
+| Propylguaiacol | 2.0 (placeholder) |
+| Propylsyringol | 2.0 (placeholder) |
+| Syringaresinol | 2.0 (placeholder) |
+| G_Dimer | 2.0 (placeholder) |
 
 ## Utilities System (Area 400 + 500)
 
@@ -303,13 +360,13 @@ BioSTEAM's BT auto-derives combustion reactions from a chemical's elemental form
 | Chemical | Formula | BT combustion reaction | Status |
 |---|---|---|---|
 | `G_Dimer` | `C20H26O6` | `23.5 O2 + G_Dimer → 13 Water + 20 CO2` | correct |
-| `S_Oligomer` | `C33H40O11` | `37.5 O2 + S_Oligomer → 20 Water + 33 CO2 + 16 Ash` | **MW mismatch — needs fix** |
+| `S_Oligomer` | `C33H40O11` | `37.5 O2 + S_Oligomer → 33 CO2 + 20 Water` | resolved — explicit MW removed; MW formula-derived (~612.67 Da) |
 | `G_Oligomer` | `C31H40O8` | `37 O2 + G_Oligomer → 20 Water + 31 CO2` | correct |
 | `Propylguaiacol` | `C10H14O2` | combusts correctly | correct |
 | `Propylsyringol` | `C11H16O3` | combusts correctly | correct |
 | `Syringaresinol` | `C22H26O8` | combusts correctly | correct |
 
-**`S_Oligomer` MW mismatch (open fix):** `formula='C33H40O11'` gives a formula-derived MW of 612.67 Da, but the chemical is defined with `MW=628.67`. The ~16 Da gap is attributed to inert `Ash` in the BT combustion stoichiometry. Fix: either change the formula to `C33H40O12` (MW 628.67) or correct `MW` to 612.67 to match the existing formula. Verify against Bartling et al. Fig S8.
+**`S_Oligomer` MW — resolved:** The explicit `MW=628.67` was removed; `S_Oligomer` is now defined with `formula='C33H40O11'` only, so thermosteam derives MW as ~612.67 Da and BT combustion produces no `Ash`. **Open question:** verify that `C33H40O11` is the correct structure against Bartling et al. Fig S8 — if the correct MW is 628.67, change the formula to `C33H40O12`.
 
 **Note on current process flows:** In the current configuration, `G_Dimer`, `S_Oligomer`, and `G_Oligomer` are fully recovered in `Purified_RCF_Oil` via EtOAc LLE and do not reach BT (`BT.ins[0]` and `BT.ins[1]` show zero flow for all three after simulation). The combustion reactions are defined as a safeguard in case any oligomers appear in a waste stream in the future.
 
@@ -322,9 +379,10 @@ BioSTEAM's BT auto-derives combustion reactions from a chemical's elemental form
 | File | Contents |
 |---|---|
 | `ligsaf_units.py` | `SolvolysisReactor`, `HydrogenolysisReactor`, `PSA`, `CatalystMixer` class definitions |
-| `ligsaf_settings.py` | All process parameters, reaction conditions, prices, biomass composition, EtOAc LLE partition data |
+| `ligsaf_settings.py` | All process parameters, reaction conditions, prices, biomass composition, EtOAc and hexane LLE partition data |
 | `ligsaf_system.py` | `create_rcf_system(ins=None)` — Area 200 factory function |
 | `ligsaf_purification_system.py` | `create_rcf_oil_purification_system(ins=None)` — Area 300 EtOAc LLE factory function |
+| `monomer_purification.py` | `create_monomer_purification_system(ins=None)` — Area 300 hexane LLE monomer/dimer separation factory function |
 | `ligsaf_utilities_system.py` | `create_rcf_utilities_system()` — Area 400 + 500; returns `(BT, WWT, gas_mixer)` |
 | `ligsaf_chemicals.py` | Chemical property definitions for the RCF system |
 | `cellulosic_tea.py` | `CellulosicEthanolTEA` class used for integrated system TEA |

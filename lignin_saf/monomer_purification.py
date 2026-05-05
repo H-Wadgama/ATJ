@@ -1,0 +1,147 @@
+import biosteam as bst
+import numpy as np
+from biosteam import main_flowsheet as F
+
+from lignin_saf.ligsaf_settings import (
+    hexane_purification,
+    hexane_partition_IDs,
+    hexane_partition_K,
+    prices,
+)
+
+
+def create_monomer_purification_system(ins=None):
+    """
+    Build and return the hexane LLE monomer purification system.
+
+    Separates the purified RCF oil (output of EtOAc LLE FLASH201) into
+    monomers/dimers via hexane liquid-liquid extraction. Oligomers (S_Oligomer,
+    G_Oligomer) are not assigned partition coefficients and remain in the
+    aqueous raffinate, which is flashed to recover them as RCF_Oligomers.
+
+    Parameters
+    ----------
+    ins : bst.Stream, optional
+        Purified RCF oil inlet. If None, F.Purified_RCF_Oil is taken from
+        the main flowsheet — rcf_oil_purification_sys must have been simulated first.
+
+    Returns
+    -------
+    bst.System
+        'Monomer_Purification_System' with hexane_recycle converged.
+
+    Notes
+    -----
+    Caller must configure thermodynamics before calling:
+        chems = create_chemicals()
+        bst.settings.set_thermo(chems)
+        bst.settings.CEPCI = 541.7
+
+    Key output streams (accessible via F.<name> after simulate()):
+        RCF_Monomers   — bottoms of FLASH301; monomers and dimers in hexane-extracted fraction
+        RCF_Oligomers  — bottoms of FLASH304; oligomers recovered from raffinate
+        WW_11          — water bleed from CENT303 hexane decanter; to wastewater treatment
+        WW_21          — overhead of FLASH304 raffinate flash; to wastewater treatment
+    """
+    purified_rcf = F.Purified_RCF_Oil if ins is None else ins
+
+    chems = bst.settings.chemicals
+
+    solvent_to_oil      = hexane_purification['solvent_to_oil_ratio']
+    water_hexane_ratio  = hexane_purification['water_hexane_ratio']
+    N_stages            = hexane_purification['N_stages']
+    recycle_split       = hexane_purification['hexane_recycle_split']
+    oil_flash_T         = hexane_purification['oil_flash_T']
+    oil_flash_P         = hexane_purification['oil_flash_P']
+    raffinate_flash_T   = hexane_purification['raffinate_flash_T']
+    raffinate_flash_P   = hexane_purification['raffinate_flash_P']
+
+    hexane_rho = chems['Hexane'].rho(phase='l', T=298.15, P=101325)
+    water_rho  = chems['Water'].rho(phase='l', T=298.15, P=101325)
+
+    partition_data = {
+        'K':                   np.array(hexane_partition_K, dtype=float),
+        'IDs':                 hexane_partition_IDs,
+        'raffinate_chemicals': ['Water'],
+        'extract_chemicals':   ['Hexane'],
+    }
+
+    # ── Streams ───────────────────────────────────────────────────────────────
+    hexane_recycle = bst.Stream('hexane_recycle')
+    hexane_in = bst.Stream(
+        'Hexane_In',
+        Hexane=solvent_to_oil * purified_rcf.F_mass,
+        Water=solvent_to_oil * purified_rcf.F_mass * (water_rho / hexane_rho) * water_hexane_ratio,
+        units='kg/hr',
+        price=prices['Hexane'],
+    )
+
+    # ── Unit operations ───────────────────────────────────────────────────────
+
+    # Fresh hexane makeup + recycle; spec sets makeup to cover the deficit each iteration
+    hexane_mixer = bst.Mixer('MIX300', ins=(hexane_in, hexane_recycle), rigorous=False)
+
+    @hexane_mixer.add_specification(run=True)
+    def adjust_fresh_solvent_flow():
+        fresh   = hexane_mixer.ins[0]
+        recycle = hexane_mixer.ins[1]
+        fresh.imass['Hexane'] = (
+            solvent_to_oil * purified_rcf.F_mass - recycle.imass['Hexane']
+        )
+        fresh.imass['Water'] = (
+            solvent_to_oil * purified_rcf.F_mass * (water_rho / hexane_rho) * water_hexane_ratio
+            - recycle.imass['Water']
+        )
+
+    # LLE: purified oil contacts hexane/water countercurrently; monomers and dimers
+    # partition into hexane extract; oligomers (unlisted) remain in aqueous raffinate
+    lle_column = bst.MultiStageMixerSettlers(
+        'LLE300',
+        ins=(purified_rcf, hexane_mixer-0),
+        outs=('', ''),
+        feed_stages=(0, -1),
+        N_stages=N_stages,
+        partition_data=partition_data,
+        use_cache=True,
+    )
+
+    # Flash hexane overhead; monomers/dimers exit as bottoms
+    monomer_flash = bst.units.Flash(
+        'FLASH301',
+        ins=lle_column-0,
+        outs=('', 'RCF_Monomers'),
+        T=oil_flash_T,
+        P=oil_flash_P,
+    )
+
+    # Condense hexane vapor for decanting
+    solvent_cooler = bst.units.HXutility(
+        'HX302',
+        ins=monomer_flash-0,
+        V=0,
+        rigorous=True,
+    )
+
+    # Split hexane from water; hexane-rich phase recycled, water bleed to wastewater
+    solvent_decanter = bst.LiquidsSplitCentrifuge(
+        'CENT303',
+        ins=solvent_cooler-0,
+        outs=(hexane_recycle, 'WW_11'),
+        split={'Hexane': recycle_split},
+    )
+
+    # Flash raffinate to separate oligomers from wastewater; overhead water to WWT
+    raffinate_flash = bst.units.Flash(
+        'FLASH304',
+        ins=lle_column-1,
+        outs=('WW_21', 'RCF_Oligomers'),
+        T=raffinate_flash_T,
+        P=raffinate_flash_P,
+    )
+
+    # ── Assemble system ───────────────────────────────────────────────────────
+    return bst.System(
+        'Monomer_Purification_System',
+        path=(hexane_mixer, lle_column, monomer_flash, solvent_cooler, solvent_decanter, raffinate_flash),
+        recycle=hexane_recycle,
+    )

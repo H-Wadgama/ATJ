@@ -147,3 +147,31 @@ etoac_partition_IDs = (
     'Syringaresinol', 'G_Dimer', 'S_Oligomer', 'G_Oligomer',
 )
 etoac_partition_K = (0.01, 200.0, 200.0, 500.0, 109.0, 200.0, 200.0)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Monomer Purification — Hexane Liquid–Liquid Extraction
+# Reference: Luo et al. 2021, Science (https://doi.org/10.1126/science.aau1567)
+# ─────────────────────────────────────────────────────────────────────────────
+
+hexane_purification = {
+    'solvent_to_oil_ratio': 5,       # [kg/kg] hexane mass per kg purified RCF oil
+    'water_hexane_ratio':   1,       # [v/v]   water : hexane volume ratio in solvent feed
+    'N_stages':             3,       # [-]     number of extraction stages
+    'hexane_recycle_split': 0.95,    # [-]     fraction of hexane recovered in centrifuge and recycled
+    'oil_flash_T':          400,     # [K]     flash temperature to evaporate hexane from monomer extract
+    'oil_flash_P':          101325,  # [Pa]    flash pressure
+    'raffinate_flash_T':    400,     # [K]     flash temperature to separate oligomers from raffinate water
+    'raffinate_flash_P':    101325,  # [Pa]    flash pressure
+}
+
+# Partition coefficients for hexane / water LLE
+# K = c_extract (hexane-rich phase) / c_raffinate (water-rich phase)
+# Placeholder values — replace with experimental LLE data when available
+# NOTE: Water K = 0.01 is a placeholder; physically water strongly prefers the aqueous
+#       raffinate (K << 1 expected). Update this when real data are available.
+# S_Oligomer and G_Oligomer are not listed — unlisted components stay in the raffinate by default.
+hexane_partition_IDs = (
+    'Water', 'Propylguaiacol', 'Propylsyringol', 'Syringaresinol', 'G_Dimer',
+)
+hexane_partition_K = (0.01, 2.0, 2.0, 2.0, 2.0)
