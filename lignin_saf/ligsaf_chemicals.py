@@ -73,6 +73,7 @@ def create_chemicals():
         'G_Dimer',
         default = True,
         search_db = False,
+        formula = 'C20H26O6',
         MW = 362.42,
         phase = 'l',
         omega = 1.3966,
@@ -87,7 +88,7 @@ def create_chemicals():
         'S_Oligomer',
         default = True,
         search_db = False,
-        MW = 628.67,
+        formula = 'C33H40O11',
         phase = 'l',
         omega = 0.78742,
         Tb = 921.4,
@@ -99,6 +100,7 @@ def create_chemicals():
         'G_Oligomer',
         default = True,
         search_db = False,
+        formula = 'C31H40O8',
         MW = 540.65,
         phase = 'l'
     )

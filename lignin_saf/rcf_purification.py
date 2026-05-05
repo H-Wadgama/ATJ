@@ -28,12 +28,12 @@ poplar_in = bst.Stream('Poplar_In',
 
 rcf_system = create_rcf_system(ins=poplar_in)
 rcf_oil_purification_sys = create_rcf_oil_purification_system(ins=F.RCF_Oil)
-BT, WWT = create_rcf_utilities_system()
+BT, WWT, gas_mixer = create_rcf_utilities_system()
 
 rcf_combined_system = bst.System(
     'Combined_RCF_System',
     path=(rcf_system, rcf_oil_purification_sys, WWT),
-    facilities=[BT],
+    facilities=[gas_mixer, BT],
 )
 rcf_combined_system.simulate()
 rcf_combined_system.show()

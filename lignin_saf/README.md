@@ -107,7 +107,7 @@ for unit in WWT.units:
     #     unit.moisture_content = 0.6
 ```
 
-The Humbird 79% moisture target was calibrated for cellulosic-ethanol organic loadings. RCF wastewater has a different organic profile (`Acetate` is non-digestable; `G_Dimer`/`S_Oligomer`/`G_Oligomer` have no molecular formula and are skipped by `get_digestable_organic_chemicals`), which can make the strict target infeasible. Set `strict_moisture_content=True` once WWT stream chemistry is validated.
+The Humbird 79% moisture target was calibrated for cellulosic-ethanol organic loadings. RCF wastewater has a different organic profile: `Acetate` is in `non_digestables` and passes through the bioreactors unreacted, accumulating in the S603 feed and reducing the available free water. `G_Dimer`/`S_Oligomer`/`G_Oligomer` now have molecular formulas (added to `ligsaf_chemicals.py`) and are therefore included in `get_digestable_organic_chemicals`, but in the current process configuration all three are fully captured in `Purified_RCF_Oil` and do not reach WWT. The primary remaining cause of the infeasibility is the Acetate accumulation. Set `strict_moisture_content=True` once WWT stream chemistry is validated against experimental RCF wastewater data.
 
 **WWT outputs:**
 
@@ -118,20 +118,22 @@ The Humbird 79% moisture target was calibrated for cellulosic-ethanol organic lo
 | `WWT.outs[2]` | RO treated water | clean permeate from reverse osmosis | unconnected |
 | `WWT.outs[3]` | brine | RO reject | unconnected |
 
-**BT combustion requirements — known gap:**
+**BT combustion reactions — current status:**
 
-BioSTEAM's BT auto-derives combustion reactions from a chemical's elemental formula (`CₓHᵧOᵤ + O₂ → CO₂ + H₂O`). Three RCF chemicals are defined in `ligsaf_chemicals.py` with only `MW` (no `formula`), so BT treats them as inert ash:
+BioSTEAM's BT auto-derives combustion reactions from a chemical's elemental formula (`CₓHᵧOᵤ + O₂ → CO₂ + H₂O`). Formulas have been added to all six RCF lignin chemicals in `ligsaf_chemicals.py`; BT now generates combustion reactions for all of them:
 
-| Chemical | Defined as | Status |
-|---|---|---|
-| `G_Dimer` | `MW=362.42` only | **no combustion reaction** |
-| `S_Oligomer` | `MW=628.67` only | **no combustion reaction** |
-| `G_Oligomer` | `MW=540.65` only | **no combustion reaction** |
-| `Propylguaiacol` | `formula='C10H14O2'` | combusts correctly |
-| `Propylsyringol` | `formula='C11H16O3'` | combusts correctly |
-| `Syringaresinol` | `formula='C22H26O8'` | combusts correctly |
+| Chemical | Formula | BT combustion reaction | Status |
+|---|---|---|---|
+| `G_Dimer` | `C20H26O6` | `23.5 O2 + G_Dimer → 13 Water + 20 CO2` | correct |
+| `S_Oligomer` | `C33H40O11` | `37.5 O2 + S_Oligomer → 20 Water + 33 CO2 + 16 Ash` | **MW mismatch — see below** |
+| `G_Oligomer` | `C31H40O8` | `37 O2 + G_Oligomer → 20 Water + 31 CO2` | correct |
+| `Propylguaiacol` | `C10H14O2` | combusts correctly | correct |
+| `Propylsyringol` | `C11H16O3` | combusts correctly | correct |
+| `Syringaresinol` | `C22H26O8` | combusts correctly | correct |
 
-To fix, add `formula='CₓHᵧOᵤ'` to each missing chemical in `ligsaf_chemicals.py` (look up from Bartling et al. Fig S8 — these are the same six components referenced there). Adding the formula also fixes WWT digestion, since `get_digestable_organic_chemicals` requires `'C' in atoms` to be true. Alternatively, set `chemical.HHV` directly if only the BT energy balance matters.
+**`S_Oligomer` MW mismatch (needs fix):** `formula='C33H40O11'` gives a formula-derived MW of 612.67 Da, but the chemical is defined with `MW=628.67`. The ~16 Da gap cannot be attributed to any element in the formula, so BioSTEAM assigns it to inert `Ash` in the combustion products. To fix, either correct the formula to match 628.67 (e.g. `C33H40O12` → 628.67) or correct `MW` to 612.67 to match `C33H40O11`.
+
+**Note on current process flows:** In the current configuration, `G_Dimer`, `S_Oligomer`, and `G_Oligomer` are fully recovered in `Purified_RCF_Oil` via EtOAc LLE and do not reach BT (`BT.ins[0]` and `BT.ins[1]` show zero flow for all three after simulation). The combustion reactions are defined as a safeguard in case any oligomers appear in a waste stream in the future.
 
 **Adding more wastewater or fuel streams in the future:**
 
