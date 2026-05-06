@@ -155,6 +155,52 @@ BT.ins[0] = solid_mixer.outs[0]
 ```
 
 
+## Unified utilities for integrated biorefinery (planned)
+
+When the cellulosic ethanol system is included in the combined simulation, the RCF system's own `create_rcf_utilities_system()` should be dropped and replaced by the cellulosic system's built-in BT and WWT, which are created with `autopopulate=True`. The cellulosic BT uses an internal `slurry_mixer` and `gas_mixer`; the cellulosic WWT uses an internal `M601` wastewater mixer.
+
+**Why autopopulate alone is not sufficient:** `autopopulate` fires once at first simulate, but only if the relevant mixer is still empty (`not mixer.ins`). If `etoh_system.simulate()` is called before the combined system is assembled, autopopulate fires within the cellulosic subsystem scope only — RCF streams are then missed when the combined system is simulated. Explicit stream injection is therefore required.
+
+**Implementation pattern:**
+
+```python
+# Build all upstream systems first (no intermediate .simulate() calls)
+rcf_system               = create_rcf_system(ins=poplar_in)
+rcf_oil_purification_sys = create_rcf_oil_purification_system(ins=F.RCF_Oil)
+monomer_purification_sys = create_monomer_purification_system(ins=F.Purified_RCF_Oil)
+etoh_system              = cellulosic.create_cellulosic_ethanol_system(ins=F.Carbohydrate_Pulp)
+# NOTE: do NOT call create_rcf_utilities_system() — use the cellulosic system's BT/WWT instead
+
+# Inject RCF wastewater streams into the unified WWT inlet mixer
+M601 = bst.main_flowsheet.unit.M601
+for sid in ('WW_10', 'WastePulp', 'RCF_WW', 'WW_11', 'WW_12'):
+    M601.ins.append(bst.main_flowsheet.stream[sid])
+M601.autopopulate = False  # prevent double-collection at combined simulate time
+
+# Inject RCF PSA purge gas into the unified BT gas mixer
+gas_mixer = bst.main_flowsheet.unit.gas_mixer
+gas_mixer.ins.append(F.Purge_Light_Gases)
+
+# Apply strict_moisture_content patch to the unified WWT
+for unit in bst.main_flowsheet.unit.M601.system.units:
+    if hasattr(unit, 'strict_moisture_content'):
+        unit.strict_moisture_content = False
+
+# Assemble — cellulosic system's facilities already contain WWT and BT
+rcf_combined_system = bst.System(
+    'Combined_RCF_System',
+    path=(rcf_system, rcf_oil_purification_sys, monomer_purification_sys, etoh_system),
+)
+rcf_combined_system.simulate()
+```
+
+**Key points:**
+- Unit IDs `M601`, `gas_mixer`, `slurry_mixer` are created inside `create_cellulosic_ethanol_system` via `bst.create_all_facilities`. Verify these IDs on the flowsheet after creating `etoh_system` if they have changed between BioSTEAM versions.
+- The `strict_moisture_content=False` patch is still needed on the unified WWT — the Acetate accumulation issue is present regardless of which WWT instance is used.
+- `Purge_Light_Gases` (PSA purge gas) has high combustion energy and qualifies as a combustible gas — it goes to `gas_mixer` → BT, not to WWT.
+- WWT biogas (`M601.system.outs[0]`) is already internally routed to the BT's `gas_mixer` inside `create_coheat_and_power_system`.
+
+
 ## Open implementation items
 
 **Pulp purifier vapor recovery (D601):** `pulp_purifier` (Flash D601, T=400 K, P=1 atm) strips residual methanol and water from the `Wet_Pulp` before the `Carbohydrate_Pulp` stream exits Area 200. The vapor overhead (`outs[0]`) is currently unrecovered — it represents lost solvent not yet accounted for in WWT. A future implementation should route this stream to wastewater treatment or to a dedicated solvent recovery step.
