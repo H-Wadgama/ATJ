@@ -64,7 +64,7 @@ def create_rcf_oil_purification_system(ins=None):
         EthylAcetate=solvent_to_crude * crude_rcf.F_mass,
         Water=solvent_to_crude * crude_rcf.F_mass * etoac_h2o_ratio,
         units='kg/hr',
-        price=prices['EthylAcetate'],
+        #price=prices['EthylAcetate'],
     )
 
     # ── Unit operations ───────────────────────────────────────────────────────

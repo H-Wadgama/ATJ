@@ -17,11 +17,11 @@ rcf_system = bst.System('RCF_System',
 
 ## Input Streams
 
-| Stream | Contents | Conditions |
-|---|---|---|
-| `poplar_in` | 2,000 dry MT/day poplar + 20% moisture | Liquid, ambient |
-| `meoh_in` | Fresh methanol make-up; flow derived from bed geometry by `meoh_water_flow` spec (~9.27 L/kg dry biomass) | Liquid |
-| `hydrogen_in` | Fresh H₂, 0.054 kg/kg dry biomass (from PEM electrolysis) | Gas, 80°C, 30 bar |
+| Stream | Contents | Conditions | Price |
+|---|---|---|---|
+| `poplar_in` | 2,000 dry MT/day poplar + 20% moisture | Liquid, ambient | `prices['Feedstock']` — must be set on the stream by the caller when `ins` is passed; the `ins=None` branch of `create_rcf_system` sets it automatically but is never reached when `ins=poplar_in` |
+| `meoh_in` | Fresh methanol make-up; flow derived from bed geometry by `meoh_water_flow` spec (~9.27 L/kg dry biomass) | Liquid | `prices['Methanol']` — set inside `create_rcf_system()` |
+| `hydrogen_in` | Fresh H₂, 0.054 kg/kg dry biomass (from PEM electrolysis) | Gas, 80°C, 30 bar | `prices['Hydrogen']` — set inside `create_rcf_system()` |
 
 ## Unit Operations
 
@@ -435,6 +435,47 @@ rcf_combined_system.simulate()
 - `Purge_Light_Gases` is combustible (CH4, H2, CO) → goes to `gas_mixer` → BT, never to WWT.
 - WWT biogas is already internally routed to the BT's `gas_mixer` inside `create_coheat_and_power_system`.
 - The `strict_moisture_content=False` patch is still needed — the Acetate accumulation issue applies regardless of which WWT instance is used.
+
+## TEA
+
+`rcf_4_21_2026` runs a full TEA using `CellulosicEthanolTEA` from `cellulosic_tea.py` (NREL 2011 methodology, 2016 USD, 10% IRR, 30-year plant life, MACRS7 depreciation for process equipment, MACRS20 for BT).
+
+**Stream pricing — complete picture:**
+
+| Stream | Variable | Price set where |
+|---|---|---|
+| `Poplar_In` | `poplar_in` | Caller sets `poplar_in.price = prices['Feedstock']` before passing to factory — the `ins=None` branch that sets it inside `create_rcf_system` is dead code when `ins` is provided |
+| `Meoh_in` | `meoh_in` | Inside `create_rcf_system()` — `price=prices['Methanol']` |
+| `Hydrogen_In` | `hydrogen_in` | Inside `create_rcf_system()` — `price=prices['Hydrogen']` |
+| EtOAc fresh makeup | created in `ligsaf_purification_system.py` | `price=prices['EthylAcetate']` |
+| Hexane fresh makeup | created in `monomer_purification.py` | `price=prices['Hexane']` |
+| `RCF_Catalyst` | `catalyst` stream in `CatalystMixer` | `price=prices['NiC_catalyst']` |
+| `Carbohydrate_Pulp` | `F.Carbohydrate_Pulp` | Set in `rcf_4_21_2026` to `prices['Feedstock']` as a conservative co-product credit; only relevant when cellulosic ethanol system is excluded |
+| `RCF_Monomers` | `F.RCF_Monomers` | Not set — left at zero so `tea.solve_price(F.RCF_Monomers)` returns the MSP |
+| WWT/BT utility chemicals | Internal WWT/BT streams | BioSTEAM defaults (H₂SO₄, lime, DAP, boiler chems, etc.) |
+
+**Labor cost** — Seider-based estimate computed in `rcf_4_21_2026`:
+```python
+# DWandB = (operators/shift) * shifts * hr/yr * $/hr
+DWandB             = 1 * 3 * 5 * 2080 * 40          # 1 op/section, 3 sections, 5 shifts, $40/hr
+Dsalaries_benefits = 0.15 * DWandB
+O_supplies         = 0.06 * DWandB
+technical_assistance = 5 * 75_000                    # 5 technical staff @ $75k/yr
+control_lab          = 5 * 80_000                    # 5 lab staff @ $80k/yr
+labor = DWandB + Dsalaries_benefits + O_supplies + technical_assistance + control_lab
+```
+Override the TEA default (`labor_cost=2.5e6`) after creating:
+```python
+integrated_tea = create_cellulosic_ethanol_tea(rcf_combined_system)
+integrated_tea.labor_cost = labor
+```
+
+**MSP calculation:**
+```python
+msp = integrated_tea.solve_price(F.RCF_Monomers)   # [USD/kg]
+```
+
+**`Carbohydrate_Pulp` disposition (cellulosic system excluded):** When the cellulosic ethanol system is excluded, the pulp exits the combined system boundary unconnected. Setting `F.Carbohydrate_Pulp.price = prices['Feedstock']` gives it a revenue credit equal to the raw poplar cost (~0.088 USD/kg at 2016 prices). This is a lower-bound assumption — the processed, cellulose-rich pulp may command a higher market price. Update when better data are available.
 
 ## Key Source Files
 

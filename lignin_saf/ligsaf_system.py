@@ -49,21 +49,22 @@ def create_rcf_system(ins=None):
         ins = bst.Stream('Poplar_In',
                          Poplar=feed_parameters['flow'] * 1e3,
                          Water=feed_parameters['moisture'] * feed_parameters['flow'] * 1e3,
-                         phase='l', units='kg/d')
+                         phase='l', units='kg/d', price=prices['Feedstock'])
 
     # ── Recycle streams ───────────────────────────────────────────────────────
     meoh_recycle = bst.MultiStream('Meoh_recycle', phases=('s', 'l', 'g'))
     hydrogen_recycle = bst.Stream('hydrogen_recycle', P=3e6, phase='g')
 
     # ── Co-feeds ──────────────────────────────────────────────────────────────
-    meoh_in = bst.Stream('Meoh_in', Methanol=0.0, Water=0.0, phase='l', units='L/d')
+    meoh_in = bst.Stream('Meoh_in', Methanol=0.0, Water=0.0, phase='l', units='L/d', price = prices['Methanol'])
 
     hydrogen_in = bst.Stream('Hydrogen_In',
                              Hydrogen=h2_biomass_ratio * 2e6,
                              units='kg/day',
                              T=80 + 273.15,   # 80°C PEM electrolyzer outlet
                              P=3e6,           # 30 bar PEM electrolyzer outlet
-                             phase='g')
+                             phase='g',
+                             price = prices['Hydrogen'])
 
     # ── Unit operations ───────────────────────────────────────────────────────
 
@@ -215,7 +216,7 @@ def create_rcf_system(ins=None):
     wastewater_mixer = bst.Mixer(
         ins=(meoh_purifier_col.outs[1], water_remover.outs[0]), outs='RCF_WW'
     )
-    
+
       # outs[0]: evaporated MeOH/water from pulp — currently unrecovered (future: route to WWT or solvent recovery)
     pulp_purifier = bst.Flash('D601', solvolysis_reactor.outs[0], outs=('', 'Carbohydrate_Pulp'), T=400, P=1e5)
 

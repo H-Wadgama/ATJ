@@ -201,6 +201,42 @@ rcf_combined_system.simulate()
 - WWT biogas (`M601.system.outs[0]`) is already internally routed to the BT's `gas_mixer` inside `create_coheat_and_power_system`.
 
 
+## TEA (Techno-Economic Analysis)
+
+`rcf_4_21_2026` runs a full TEA using `CellulosicEthanolTEA` (NREL 2011 methodology, 2016 USD, 10% IRR, 30-year plant life, MACRS7 depreciation).
+
+**Stream prices** — set in two places:
+
+| Stream | Set where |
+|---|---|
+| `Meoh_in` (methanol makeup) | Inside `create_rcf_system()` in `ligsaf_system.py` |
+| `Hydrogen_In` | Inside `create_rcf_system()` in `ligsaf_system.py` |
+| `Poplar_In` (feedstock) | On the stream object in `rcf_4_21_2026` before calling `create_rcf_system(ins=poplar_in)` — the price inside the `ins=None` branch of the factory is dead code when `ins` is passed |
+| EtOAc makeup | Inside `create_rcf_oil_purification_system()` |
+| Hexane makeup | Inside `create_monomer_purification_system()` |
+| NiC catalyst | OPEX via `CatalystMixer`; `price=prices['NiC_catalyst']` on the catalyst stream |
+
+**`Carbohydrate_Pulp` co-product credit:** When the cellulosic ethanol system is excluded, `Carbohydrate_Pulp` exits the combined system boundary with no downstream. A co-product credit is assigned at the feedstock price as a conservative lower-bound:
+```python
+F.Carbohydrate_Pulp.price = prices['Feedstock']
+```
+Update this value when a better market price for cellulosic pulp is available.
+
+**Labor cost** — Seider-based estimate computed in `rcf_4_21_2026`, then used to override the TEA default:
+```python
+# 1 operator/section × 3 sections × 5 shifts × 2080 hr/yr × $40/hr
+DWandB = 1 * 3 * 5 * 2080 * 40
+labor  = DWandB + 0.15*DWandB + 0.06*DWandB + 5*75_000 + 5*80_000
+
+integrated_tea = create_cellulosic_ethanol_tea(rcf_combined_system)
+integrated_tea.labor_cost = labor   # overrides default 2.5e6
+```
+
+**Minimum selling price (MSP):**
+```python
+msp = integrated_tea.solve_price(F.RCF_Monomers)   # [USD/kg]
+```
+
 ## Open implementation items
 
 **Pulp purifier vapor recovery (D601):** `pulp_purifier` (Flash D601, T=400 K, P=1 atm) strips residual methanol and water from the `Wet_Pulp` before the `Carbohydrate_Pulp` stream exits Area 200. The vapor overhead (`outs[0]`) is currently unrecovered — it represents lost solvent not yet accounted for in WWT. A future implementation should route this stream to wastewater treatment or to a dedicated solvent recovery step.
