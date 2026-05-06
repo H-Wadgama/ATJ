@@ -72,6 +72,7 @@ rcf_oil_yield = {
     'Oligomers' : 0.25
 }
 
+condensation_extent = 0.366
 
 
 

@@ -5,7 +5,7 @@ from lignin_saf.ligsaf_settings import (
     rcf_oil_yield, prices, feed_parameters, rcf_conditions,
     solvolysis_parameters, meoh_h2o, h2_biomass_ratio, RCF_catalyst,
     poplar_density, free_frac,
-    V_max_limit,
+    V_max_limit, condensation_extent
 )
 
 
@@ -151,17 +151,17 @@ def create_rcf_system(ins=None):
     # Hydrogenolysis reactions
     hydrogenolysis = bst.ParallelReaction([
         bst.Reaction('SolubleLignin,l -> Propylguaiacol,l', reactant='SolubleLignin', phases='lg',
-                     X=rcf_oil_yield['Monomers'] * 0.5, basis='wt', correct_atomic_balance=False),
+                     X=rcf_oil_yield['Monomers'] * 0.5*(1-condensation_extent), basis='wt', correct_atomic_balance=False),
         bst.Reaction('SolubleLignin,l -> Propylsyringol,l', reactant='SolubleLignin', phases='lg',
-                     X=rcf_oil_yield['Monomers'] * 0.5, basis='wt', correct_atomic_balance=False),
+                     X=rcf_oil_yield['Monomers'] * 0.5*(1-condensation_extent), basis='wt', correct_atomic_balance=False),
         bst.Reaction('SolubleLignin,l -> Syringaresinol,l', reactant='SolubleLignin', phases='lg',
                      X=rcf_oil_yield['Dimers'] * 0.5, basis='wt', correct_atomic_balance=False),
         bst.Reaction('SolubleLignin,l -> G_Dimer,l', reactant='SolubleLignin', phases='lg',
                      X=rcf_oil_yield['Dimers'] * 0.5, basis='wt', correct_atomic_balance=False),
         bst.Reaction('SolubleLignin,l -> S_Oligomer,l', reactant='SolubleLignin', phases='lg',
-                     X=rcf_oil_yield['Oligomers'] * 0.5, basis='wt', correct_atomic_balance=False),
+                     X=rcf_oil_yield['Oligomers'] * 0.5 + rcf_oil_yield['Monomers'] * 0.5 * condensation_extent, basis='wt', correct_atomic_balance=False),
         bst.Reaction('SolubleLignin,l -> G_Oligomer,l', reactant='SolubleLignin', phases='lg',
-                     X=rcf_oil_yield['Oligomers'] * 0.5, basis='wt', correct_atomic_balance=False),
+                     X=rcf_oil_yield['Oligomers'] * 0.5 + rcf_oil_yield['Monomers'] * 0.5 * condensation_extent, basis='wt', correct_atomic_balance=False),
     ])
 
     hydrogenolysis_reactor = HydrogenolysisReactor(
