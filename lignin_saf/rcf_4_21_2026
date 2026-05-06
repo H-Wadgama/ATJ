@@ -9,6 +9,8 @@ from biorefineries import cellulosic
 
 from biosteam import main_flowsheet as F
 import biosteam as bst
+import pandas as pd
+import numpy as np
 
 chems = create_chemicals()
 bst.settings.set_thermo(chems)
@@ -88,5 +90,25 @@ rcf_oil_purification_ic = sum(u.installed_cost for u in rcf_oil_purification)
 rcf_monomer_purification_ic = sum(u.installed_cost for u in monomer_purification)
 BT_installed_cost = F.BT.installed_cost
 WWT_installed_cost  = F.WWTC.installed_cost
-installed_costs_arr = np.array([rcf_area_ic, rcf_oil_purification_ic, rcf_monomer_purification_ic, 
+installed_costs_arr = np.array([rcf_area_ic, rcf_oil_purification_ic, rcf_monomer_purification_ic,
                             BT_installed_cost, WWT_installed_cost])
+
+# --- Export net system boundary flows to CSV ---
+chem_ids = [c.ID for c in chems]
+
+rows = []
+for s in rcf_combined_system.feeds:
+    comp_flows = {c: s.imass[c] for c in chem_ids}
+    rows.append({'Stream': s.ID, 'Direction': 'Input', 'Phase': s.phase,
+                 'Total_kg_hr': s.F_mass, **comp_flows})
+for s in rcf_combined_system.products:
+    comp_flows = {c: s.imass[c] for c in chem_ids}
+    rows.append({'Stream': s.ID, 'Direction': 'Output', 'Phase': s.phase,
+                 'Total_kg_hr': s.F_mass, **comp_flows})
+
+df = pd.DataFrame(rows).set_index(['Stream', 'Direction', 'Phase', 'Total_kg_hr'])
+# Drop columns where every stream has zero flow
+df = df.loc[:, (df != 0).any(axis=0)]
+df = df.reset_index()
+df.to_csv('rcf_system_boundary_flows.csv', index=False)
+print('Saved rcf_system_boundary_flows.csv')
