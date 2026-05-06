@@ -67,3 +67,26 @@ integrated_tea = create_cellulosic_ethanol_tea(rcf_combined_system)
 integrated_tea.labor_cost = labor
 
 print(f'The MSP for RCF monomers is  {round(integrated_tea.solve_price(F.RCF_Monomers),3)} USD/kg')
+
+
+# Different sections
+
+rcf_area= [F.MIX100, F.PUMP101, F.HX102, F.RCF103_S, F.MIX104, F.HX105, F.RCF106_H, F.FLASH107, F.PUMP108,
+F.FLASH109, F.HX110, F.PSA111, F.PUMP112, F.DIST113, F.DIST114, F.MIX116, F.HX117, F.FLASH118, F.M1, F.D601,F.M2]
+
+rcf_oil_purification = [F.MIX200, F.LLE200, F.FLASH201, F.HX202, F.CENT203]
+
+monomer_purification = [F.MIX300, F.LLE300, F.FLASH301, F.HX302, F.CENT303]
+
+BT = [BT]
+
+WWT = [WWT]
+
+
+rcf_area_ic = sum(u.installed_cost for u in rcf_area)
+rcf_oil_purification_ic = sum(u.installed_cost for u in rcf_oil_purification)
+rcf_monomer_purification_ic = sum(u.installed_cost for u in monomer_purification)
+BT_installed_cost = F.BT.installed_cost
+WWT_installed_cost  = F.WWTC.installed_cost
+installed_costs_arr = np.array([rcf_area_ic, rcf_oil_purification_ic, rcf_monomer_purification_ic, 
+                            BT_installed_cost, WWT_installed_cost])
