@@ -56,7 +56,9 @@ def create_rcf_system(ins=None):
     hydrogen_recycle = bst.Stream('hydrogen_recycle', P=3e6, phase='g')
 
     # ── Co-feeds ──────────────────────────────────────────────────────────────
-    meoh_in = bst.Stream('Meoh_in', Methanol=0.0, Water=0.0, phase='l', units='L/d', price = prices['Methanol'])
+    # Methanol and water split into separate streams so price applies only to methanol
+    meoh_in = bst.Stream('Meoh_in', Methanol=0.0, phase='l', units='kg/hr', price=prices['Methanol'])
+    water_in_meoh = bst.Stream('Water_in_meoh', Water=0.0, phase='l', units='kg/hr')
 
     hydrogen_in = bst.Stream('Hydrogen_In',
                              Hydrogen=h2_biomass_ratio * 2e6,
@@ -69,12 +71,13 @@ def create_rcf_system(ins=None):
     # ── Unit operations ───────────────────────────────────────────────────────
 
     # MeOH mixer: adjusts fresh feed to make up for what the recycle doesn't supply
-    meoh_h2o_mix = bst.units.Mixer('MIX100', ins=(meoh_in, meoh_recycle), rigorous=True)
+    meoh_h2o_mix = bst.units.Mixer('MIX100', ins=(meoh_in, water_in_meoh, meoh_recycle), rigorous=True)
 
     @meoh_h2o_mix.add_specification(run=True)
     def meoh_water_flow():
-        fresh_solvent = meoh_h2o_mix.ins[0]
-        recycle_solvent = meoh_h2o_mix.ins[1]
+        meoh_fresh     = meoh_h2o_mix.ins[0]
+        water_fresh    = meoh_h2o_mix.ins[1]
+        recycle_solvent = meoh_h2o_mix.ins[2]
         total_vol_hr = solvolysis_reactor.compute_Q_total()  # m³/hr — derived from bed geometry
         meoh_flow_mol = (
             total_vol_hr * meoh_h2o / (meoh_h2o + 1)
@@ -86,8 +89,8 @@ def create_rcf_system(ins=None):
             * chems['Water'].rho(phase='l', T=rcf_conditions['T'], P=rcf_conditions['P'])
             * (1 / chems['Water'].MW)
         )
-        fresh_solvent.imol['Methanol'] = meoh_flow_mol - recycle_solvent.imol['Methanol']
-        fresh_solvent.imol['Water']    = water_flow_mol - recycle_solvent.imol['Water']
+        meoh_fresh.imol['Methanol']  = meoh_flow_mol  - recycle_solvent.imol['Methanol']
+        water_fresh.imol['Water']    = water_flow_mol - recycle_solvent.imol['Water']
         meoh_h2o_mix.outs[0].phases = ('s', 'l', 'g')  # needed by downstream reactors
 
     meoh_pump = bst.units.Pump('PUMP101', ins=meoh_h2o_mix-0, P=rcf_conditions['P'])

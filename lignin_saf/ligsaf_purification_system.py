@@ -59,25 +59,31 @@ def create_rcf_oil_purification_system(ins=None):
 
     # ── Streams ───────────────────────────────────────────────────────────────
     solvent_recycle = bst.Stream('solvent_recycle')
+    # EtOAc and water split into separate streams so price applies only to EtOAc
     ethyl_acetate_in = bst.Stream(
         'EthylAcetate_in',
         EthylAcetate=solvent_to_crude * crude_rcf.F_mass,
+        units='kg/hr',
+        price=prices['EthylAcetate'],
+    )
+    water_in_etoac = bst.Stream(
+        'Water_in_etoac',
         Water=solvent_to_crude * crude_rcf.F_mass * etoac_h2o_ratio,
         units='kg/hr',
-        #price=prices['EthylAcetate'],
     )
 
     # ── Unit operations ───────────────────────────────────────────────────────
 
-    # Fresh EtOAc makeup + recycle; spec sets makeup to cover the deficit each iteration
-    solvent_mixer = bst.units.Mixer('MIX200', ins=(ethyl_acetate_in, solvent_recycle), rigorous=False)
+    # Fresh EtOAc + fresh water + recycle; spec sets makeup to cover the deficit each iteration
+    solvent_mixer = bst.units.Mixer('MIX200', ins=(ethyl_acetate_in, water_in_etoac, solvent_recycle), rigorous=False)
 
     @solvent_mixer.add_specification(run=True)
     def adjust_fresh_solvent_flow():
-        fresh   = solvent_mixer.ins[0]
-        recycle = solvent_mixer.ins[1]
-        fresh.imass['EthylAcetate'] = (solvent_to_crude * crude_rcf.F_mass) - recycle.imass['EthylAcetate']
-        fresh.imass['Water']        = (solvent_to_crude * crude_rcf.F_mass * etoac_h2o_ratio) - recycle.imass['Water']
+        etoac_fresh = solvent_mixer.ins[0]
+        water_fresh = solvent_mixer.ins[1]
+        recycle     = solvent_mixer.ins[2]
+        etoac_fresh.imass['EthylAcetate'] = (solvent_to_crude * crude_rcf.F_mass) - recycle.imass['EthylAcetate']
+        water_fresh.imass['Water']        = (solvent_to_crude * crude_rcf.F_mass * etoac_h2o_ratio) - recycle.imass['Water']
 
     # LLE: crude oil contacts EtOAc/water countercurrently; lignin products partition into EtOAc extract
     lle_column = bst.MultiStageMixerSettlers(

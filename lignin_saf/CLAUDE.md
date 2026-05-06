@@ -20,14 +20,15 @@ rcf_system = bst.System('RCF_System',
 | Stream | Contents | Conditions | Price |
 |---|---|---|---|
 | `poplar_in` | 2,000 dry MT/day poplar + 20% moisture | Liquid, ambient | `prices['Feedstock']` — must be set on the stream by the caller when `ins` is passed; the `ins=None` branch of `create_rcf_system` sets it automatically but is never reached when `ins=poplar_in` |
-| `meoh_in` | Fresh methanol make-up; flow derived from bed geometry by `meoh_water_flow` spec (~9.27 L/kg dry biomass) | Liquid | `prices['Methanol']` — set inside `create_rcf_system()` |
+| `meoh_in` | Fresh methanol only; flow set by `meoh_water_flow` spec | Liquid | `prices['Methanol']` — set inside `create_rcf_system()` |
+| `water_in_meoh` | Fresh process water for MeOH solvent; flow set by `meoh_water_flow` spec | Liquid | No price (process water) |
 | `hydrogen_in` | Fresh H₂, 0.054 kg/kg dry biomass (from PEM electrolysis) | Gas, 80°C, 30 bar | `prices['Hydrogen']` — set inside `create_rcf_system()` |
 
 ## Unit Operations
 
 | Unit ID | Variable Name | Type | Function | Key Parameters |
 |---|---|---|---|---|
-| MIX100 | `meoh_h2o_mix` | Mixer | Mix fresh MeOH + MeOH recycle | — |
+| MIX100 | `meoh_h2o_mix` | Mixer | Mix fresh MeOH (`Meoh_in`) + fresh water (`Water_in_meoh`) + MeOH recycle | — |
 | PUMP101 | `meoh_pump` | Pump | Pressurize MeOH | P = 60 bar |
 | HX102 | `meoh_heater` | HXutility | Heat MeOH | T = 200°C, rigorous VLE |
 | RCF103_S | `solvolysis_reactor` | `SolvolysisReactor` (custom) | Solvolysis: delignify biomass; produce pulp + liquor | T=200°C, P=60 bar, τ_s=3 hr, τ_0=1 hr, τ_res=1/3 hr, void_frac=0.5, V_max_limit=600 m³, LD_max=5.0; solvent loading derived (~9.27 L/kg) |
@@ -202,7 +203,7 @@ If `ins=None`, `F.RCF_Oil` is grabbed from the main flowsheet — `rcf_system` m
 
 | Unit ID | Variable Name | Type | Function | Key Parameters |
 |---|---|---|---|---|
-| MIX200 | `solvent_mixer` | Mixer | Mix fresh EtOAc makeup + solvent recycle | spec sets makeup = total required − recycle |
+| MIX200 | `solvent_mixer` | Mixer | Mix fresh EtOAc (`EthylAcetate_in`) + fresh water (`Water_in_etoac`) + solvent recycle | spec sets makeup = total required − recycle |
 | LLE200 | `lle_column` | MultiStageMixerSettlers | 3-stage countercurrent EtOAc/water LLE | N_stages=3, feed_stages=(0, −1); lignin products partition to EtOAc extract |
 | FLASH201 | `oil_flash` | Flash | Evaporate EtOAc overhead; **`Purified_RCF_Oil`** exits as bottoms | T=400 K, P=1 atm |
 | HX202 | `solvent_cooler` | HXutility | Condense EtOAc vapor | V=0, rigorous |
@@ -259,7 +260,7 @@ If `ins=None`, `F.Purified_RCF_Oil` is taken from the main flowsheet — `rcf_oi
 
 | Unit ID | Variable Name | Type | Function | Key Parameters |
 |---|---|---|---|---|
-| MIX300 | `hexane_mixer` | Mixer | Mix fresh hexane makeup + hexane recycle | spec sets makeup = total required − recycle |
+| MIX300 | `hexane_mixer` | Mixer | Mix fresh hexane (`Hexane_In`) + fresh water (`Water_in_hexane`) + hexane recycle | spec sets makeup = total required − recycle |
 | LLE300 | `lle_column` | MultiStageMixerSettlers | 3-stage countercurrent hexane/water LLE | N_stages=3, feed_stages=(0, −1); true monomers (Propylguaiacol, Propylsyringol) partition to hexane extract; Syringaresinol (dimer), G_Dimer, S_Oligomer, G_Oligomer unlisted → stay in raffinate (`WW_12`) |
 | FLASH301 | `monomer_flash` | Flash | Evaporate hexane overhead; **`RCF_Monomers`** exits as bottoms | T=400 K, P=1 atm |
 | HX302 | `solvent_cooler` | HXutility | Condense hexane vapor | V=0, rigorous |
@@ -445,14 +446,32 @@ rcf_combined_system.simulate()
 | Stream | Variable | Price set where |
 |---|---|---|
 | `Poplar_In` | `poplar_in` | Caller sets `poplar_in.price = prices['Feedstock']` before passing to factory — the `ins=None` branch that sets it inside `create_rcf_system` is dead code when `ins` is provided |
-| `Meoh_in` | `meoh_in` | Inside `create_rcf_system()` — `price=prices['Methanol']` |
+| `Meoh_in` | `meoh_in` | Inside `create_rcf_system()` — methanol only, `price=prices['Methanol']`; water is in separate unpriced `Water_in_meoh` |
 | `Hydrogen_In` | `hydrogen_in` | Inside `create_rcf_system()` — `price=prices['Hydrogen']` |
-| EtOAc fresh makeup | created in `ligsaf_purification_system.py` | `price=prices['EthylAcetate']` |
-| Hexane fresh makeup | created in `monomer_purification.py` | `price=prices['Hexane']` |
+| `EthylAcetate_in` | EtOAc fresh makeup | Inside `create_rcf_oil_purification_system()` — EtOAc only, `price=prices['EthylAcetate']`; water is in separate unpriced `Water_in_etoac` |
+| `Hexane_In` | Hexane fresh makeup | Inside `create_monomer_purification_system()` — hexane only, `price=prices['Hexane']`; water is in separate unpriced `Water_in_hexane` |
 | `RCF_Catalyst` | `catalyst` stream in `CatalystMixer` | `price=prices['NiC_catalyst']` |
 | `Carbohydrate_Pulp` | `F.Carbohydrate_Pulp` | Set in `rcf_4_21_2026` to `prices['Feedstock']` as a conservative co-product credit; only relevant when cellulosic ethanol system is excluded |
 | `RCF_Monomers` | `F.RCF_Monomers` | Not set — left at zero so `tea.solve_price(F.RCF_Monomers)` returns the MSP |
 | WWT/BT utility chemicals | Internal WWT/BT streams | BioSTEAM defaults (H₂SO₄, lime, DAP, boiler chems, etc.) |
+
+**BioSTEAM stream pricing convention — IMPORTANT for future streams:**
+
+`stream.price` is charged as `price × stream.F_mass` (price per kg of *total stream mass*). If a makeup stream contains both a priced solvent and free process water, they **must** be split into two separate streams:
+- one stream carrying only the priced component (with `price` set)
+- one stream carrying only water (no `price`, defaults to 0)
+
+Both feed into the same downstream mixer. The `add_specification` spec adjusts each stream's flow independently.
+
+Current streams that follow this pattern:
+
+| Priced stream | Unpriced water stream | Mixer |
+|---|---|---|
+| `Meoh_in` (Methanol only) | `Water_in_meoh` | MIX100 (`meoh_h2o_mix`) |
+| `EthylAcetate_in` (EtOAc only) | `Water_in_etoac` | MIX200 (`solvent_mixer`) |
+| `Hexane_In` (Hexane only) | `Water_in_hexane` | MIX300 (`hexane_mixer`) |
+
+When adding any new solvent makeup stream that co-feeds water, apply this same split. Do not combine priced solvent and free water into a single stream.
 
 **Labor cost** — Seider-based estimate computed in `rcf_4_21_2026`:
 ```python

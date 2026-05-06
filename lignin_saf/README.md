@@ -209,12 +209,14 @@ rcf_combined_system.simulate()
 
 | Stream | Set where |
 |---|---|
-| `Meoh_in` (methanol makeup) | Inside `create_rcf_system()` in `ligsaf_system.py` |
+| `Meoh_in` (methanol only) | Inside `create_rcf_system()` in `ligsaf_system.py`; process water is in separate unpriced `Water_in_meoh` |
 | `Hydrogen_In` | Inside `create_rcf_system()` in `ligsaf_system.py` |
 | `Poplar_In` (feedstock) | On the stream object in `rcf_4_21_2026` before calling `create_rcf_system(ins=poplar_in)` — the price inside the `ins=None` branch of the factory is dead code when `ins` is passed |
-| EtOAc makeup | Inside `create_rcf_oil_purification_system()` |
-| Hexane makeup | Inside `create_monomer_purification_system()` |
+| `EthylAcetate_in` (EtOAc only) | Inside `create_rcf_oil_purification_system()`; process water is in separate unpriced `Water_in_etoac` |
+| `Hexane_In` (hexane only) | Inside `create_monomer_purification_system()`; process water is in separate unpriced `Water_in_hexane` |
 | NiC catalyst | OPEX via `CatalystMixer`; `price=prices['NiC_catalyst']` on the catalyst stream |
+
+**Stream pricing convention:** BioSTEAM charges `price × F_mass` for the *entire* stream. Whenever a solvent makeup stream co-feeds both a priced solvent and free water, they must be two separate streams — priced solvent only on the first, unpriced water on the second — both entering the same mixer. See CLAUDE.md TEA section for the full convention and the table of existing split stream pairs.
 
 **`Carbohydrate_Pulp` co-product credit:** When the cellulosic ethanol system is excluded, `Carbohydrate_Pulp` exits the combined system boundary with no downstream. A co-product credit is assigned at the feedstock price as a conservative lower-bound:
 ```python

@@ -69,27 +69,33 @@ def create_monomer_purification_system(ins=None):
 
     # ── Streams ───────────────────────────────────────────────────────────────
     hexane_recycle = bst.Stream('hexane_recycle')
+    # Hexane and water split into separate streams so price applies only to hexane
     hexane_in = bst.Stream(
         'Hexane_In',
         Hexane=solvent_to_oil * purified_rcf.F_mass,
-        Water=solvent_to_oil * purified_rcf.F_mass * (water_rho / hexane_rho) * water_hexane_ratio,
         units='kg/hr',
         price=prices['Hexane'],
+    )
+    water_in_hexane = bst.Stream(
+        'Water_in_hexane',
+        Water=solvent_to_oil * purified_rcf.F_mass * (water_rho / hexane_rho) * water_hexane_ratio,
+        units='kg/hr',
     )
 
     # ── Unit operations ───────────────────────────────────────────────────────
 
-    # Fresh hexane makeup + recycle; spec sets makeup to cover the deficit each iteration
-    hexane_mixer = bst.Mixer('MIX300', ins=(hexane_in, hexane_recycle), rigorous=False)
+    # Fresh hexane + fresh water + recycle; spec sets makeup to cover the deficit each iteration
+    hexane_mixer = bst.Mixer('MIX300', ins=(hexane_in, water_in_hexane, hexane_recycle), rigorous=False)
 
     @hexane_mixer.add_specification(run=True)
     def adjust_fresh_solvent_flow():
-        fresh   = hexane_mixer.ins[0]
-        recycle = hexane_mixer.ins[1]
-        fresh.imass['Hexane'] = (
+        hexane_fresh = hexane_mixer.ins[0]
+        water_fresh  = hexane_mixer.ins[1]
+        recycle      = hexane_mixer.ins[2]
+        hexane_fresh.imass['Hexane'] = (
             solvent_to_oil * purified_rcf.F_mass - recycle.imass['Hexane']
         )
-        fresh.imass['Water'] = (
+        water_fresh.imass['Water'] = (
             solvent_to_oil * purified_rcf.F_mass * (water_rho / hexane_rho) * water_hexane_ratio
             - recycle.imass['Water']
         )

@@ -14,7 +14,8 @@
       "Bash(python *)",
       "Bash(conda run *)",
       "PowerShell(conda activate *)",
-      "PowerShell(conda run *)"
+      "PowerShell(conda run *)",
+      "Bash(\"C:/Users/hwadg/anaconda3/envs/pyfuel/python.exe\" lignin_saf/rcf_4_21_2026)"
     ]
   }
 }
