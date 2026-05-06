@@ -149,19 +149,26 @@ def create_rcf_system(ins=None):
         h2_pre_heat.outs[0].phase = 'g'
 
     # Hydrogenolysis reactions
+    # The six parallel reactions are designed so that ΣXi = Monomers + Dimers + Oligomers = 1.0
+    # for any condensation_extent (algebraic identity). BioSTEAM's ParallelReaction captures the
+    # initial reactant amount and subtracts Xi×SL0 sequentially; the check raises InfeasibleRegion
+    # when remaining < -1e-12. At high delignification (large SL0), floating-point error in the
+    # sum can exceed this threshold. Scale all X values by (1 - 1e-6) to leave ~1 ppm unconverted
+    # and keep the residual well above -1e-12 for any feasible SL0.
+    _X_scale = 1.0 - 1e-6
     hydrogenolysis = bst.ParallelReaction([
         bst.Reaction('SolubleLignin,l -> Propylguaiacol,l', reactant='SolubleLignin', phases='lg',
-                     X=rcf_oil_yield['Monomers'] * 0.5*(1-condensation_extent), basis='wt', correct_atomic_balance=False),
+                     X=_X_scale * rcf_oil_yield['Monomers'] * 0.5*(1-condensation_extent), basis='wt', correct_atomic_balance=False),
         bst.Reaction('SolubleLignin,l -> Propylsyringol,l', reactant='SolubleLignin', phases='lg',
-                     X=rcf_oil_yield['Monomers'] * 0.5*(1-condensation_extent), basis='wt', correct_atomic_balance=False),
+                     X=_X_scale * rcf_oil_yield['Monomers'] * 0.5*(1-condensation_extent), basis='wt', correct_atomic_balance=False),
         bst.Reaction('SolubleLignin,l -> Syringaresinol,l', reactant='SolubleLignin', phases='lg',
-                     X=rcf_oil_yield['Dimers'] * 0.5, basis='wt', correct_atomic_balance=False),
+                     X=_X_scale * rcf_oil_yield['Dimers'] * 0.5, basis='wt', correct_atomic_balance=False),
         bst.Reaction('SolubleLignin,l -> G_Dimer,l', reactant='SolubleLignin', phases='lg',
-                     X=rcf_oil_yield['Dimers'] * 0.5, basis='wt', correct_atomic_balance=False),
+                     X=_X_scale * rcf_oil_yield['Dimers'] * 0.5, basis='wt', correct_atomic_balance=False),
         bst.Reaction('SolubleLignin,l -> S_Oligomer,l', reactant='SolubleLignin', phases='lg',
-                     X=rcf_oil_yield['Oligomers'] * 0.5 + rcf_oil_yield['Monomers'] * 0.5 * condensation_extent, basis='wt', correct_atomic_balance=False),
+                     X=_X_scale * (rcf_oil_yield['Oligomers'] * 0.5 + rcf_oil_yield['Monomers'] * 0.5 * condensation_extent), basis='wt', correct_atomic_balance=False),
         bst.Reaction('SolubleLignin,l -> G_Oligomer,l', reactant='SolubleLignin', phases='lg',
-                     X=rcf_oil_yield['Oligomers'] * 0.5 + rcf_oil_yield['Monomers'] * 0.5 * condensation_extent, basis='wt', correct_atomic_balance=False),
+                     X=_X_scale * (rcf_oil_yield['Oligomers'] * 0.5 + rcf_oil_yield['Monomers'] * 0.5 * condensation_extent), basis='wt', correct_atomic_balance=False),
     ])
 
     hydrogenolysis_reactor = HydrogenolysisReactor(

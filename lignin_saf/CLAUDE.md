@@ -30,11 +30,11 @@ rcf_system = bst.System('RCF_System',
 |---|---|---|---|---|
 | MIX100 | `meoh_h2o_mix` | Mixer | Mix fresh MeOH (`Meoh_in`) + fresh water (`Water_in_meoh`) + MeOH recycle | — |
 | PUMP101 | `meoh_pump` | Pump | Pressurize MeOH | P = 60 bar |
-| HX102 | `meoh_heater` | HXutility | Heat MeOH | T = 200°C, rigorous VLE |
-| RCF103_S | `solvolysis_reactor` | `SolvolysisReactor` (custom) | Solvolysis: delignify biomass; produce pulp + liquor | T=200°C, P=60 bar, τ_s=3 hr, τ_0=1 hr, τ_res=1/3 hr, void_frac=0.5, V_max_limit=600 m³, LD_max=5.0; solvent loading derived (~9.27 L/kg) |
+| HX102 | `meoh_heater` | HXutility | Heat MeOH | T = 250°C, rigorous VLE |
+| RCF103_S | `solvolysis_reactor` | `SolvolysisReactor` (custom) | Solvolysis: delignify biomass; produce pulp + liquor | T=250°C, P=60 bar, τ_s=3 hr, τ_0=1 hr, τ_res=18/60 hr (18 min), void_frac=0.5, V_max_limit=600 m³, LD_max=5.0; solvent loading derived from geometry |
 | MIX104 | `h2_mixer` | Mixer | Mix fresh H₂ + H₂ recycle | — |
-| HX105 | `h2_pre_heat` | HXutility | Heat H₂ | T = 200°C, rigorous |
-| RCF106_H | `hydrogenolysis_reactor` | `HydrogenolysisReactor` (custom) | Hydrogenolyze lignin oil to C5–C15 monomers; continuous fixed-bed | T=200°C, P=60 bar, τ_res=1/3 hr (20 min), void_frac=0.7, free_frac=0.20, V_max_limit=100 m³, LD∈[3,10]; N_reactors derived from sizing |
+| HX105 | `h2_pre_heat` | HXutility | Heat H₂ | T = 250°C, rigorous |
+| RCF106_H | `hydrogenolysis_reactor` | `HydrogenolysisReactor` (custom) | Hydrogenolyze lignin oil to C5–C15 monomers; continuous fixed-bed | T=250°C, P=60 bar, τ_res=1/3 hr (20 min), void_frac=0.7, free_frac=0.20, V_max_limit=100 m³, LD∈[3,10]; N_reactors derived from sizing; all product X values scaled by (1−1e−6) for numerical stability |
 | — | `R102` | (flash/separator step inside hydrogenolysis path) | Phase separation after reactor | — |
 | PUMP108 | `pre_psa_pump` | IsentropicCompressor | Compress vapor for PSA | P = 5 bar, vle=True |
 | FLASH109 | `pre_psa_flash` | Flash | Cool/condense before PSA | T = 260 K, P = 5 bar |
@@ -74,6 +74,8 @@ Recycle specs: fresh feed in each mixer is adjusted so that `fresh + recycle = r
 
 **`pulp_purifier` vapor outlet (D601, `outs[0]`):** The flash overhead contains evaporated MeOH and water stripped from the biomass pulp. It is currently unconnected — the solvent is not recovered. A future implementation should route this stream to `wastewater_mixer` (for WWT) or to a dedicated solvent recovery unit. When doing so, move `pulp_purifier` before `wastewater_mixer` in the path and add `pulp_purifier.outs[0]` to `wastewater_mixer.ins`.
 
+**Hydrogenolysis reactions — `_X_scale = 1 − 1e−6` numerical guard (`ligsaf_system.py`):** The six parallel reactions are set up so that ΣXi = Monomers + Dimers + Oligomers = 1.0 exactly (algebraic identity, holds for any `condensation_extent`). BioSTEAM's `ParallelReaction` captures each reactant's initial mass and subtracts Xi × SL0 in sequence; the residual `SL0 × (1 − ΣXi)` should be zero but floating-point arithmetic can produce a tiny negative value. At high delignification (large SL0), this absolute error can exceed BioSTEAM's −1e−12 threshold, raising `InfeasibleRegion`. All X values are therefore multiplied by `(1 − 1e−6)` so ~1 ppm of SolubleLignin passes through unconverted — negligible for the mass balance and TEA. If `condensation_extent` or `rcf_oil_yield` fractions are changed, the guard remains valid as long as the new fractions still sum to 1.0.
+
 **`SolvolysisReactor._run()` solvent retention — hardcoded to `('Methanol', 'Water')`:** The loop that deposits a small fraction of solvent into the biomass stream is:
 ```python
 for chem_id in ('Methanol', 'Water'):
@@ -85,15 +87,16 @@ This was restricted from a generic `for chem in solvent.chemicals` loop (which c
 
 | Parameter | Value |
 |---|---|
-| Solvolysis T / P / τ | 200°C / 60 bar / 3 hr (time on stream) + 1/3 hr hydraulic RT |
-| Hydrogenolysis T / P / τ_res | 200°C / 60 bar / 20 min (1/3 hr hydraulic RT); continuous, catalyst on-stream indefinitely |
-| Solvent loading | ~9.27 L/kg — derived from bed geometry (Q = V_void / τ_res); reported as `design_results['Solvent loading']`; consistent with Bartling et al. 9 L/kg |
+| Solvolysis T / P / τ | 250°C / 60 bar / 3 hr (time on stream) + 18/60 hr (18 min) hydraulic RT |
+| Hydrogenolysis T / P / τ_res | 250°C / 60 bar / 20 min (1/3 hr hydraulic RT); continuous, catalyst on-stream indefinitely |
+| Solvent loading | derived from bed geometry (Q = V_solvent / τ_res); reported as `design_results['Solvent loading']` |
 | Max vessel volume (`V_max_limit`) | 600 m³ — hard upper bound enforced by k-multiplier scaling of N_total |
 | H₂:biomass ratio | 0.054 kg H₂/kg dry biomass |
 | NiC catalyst loading | 0.1 kg/kg dry biomass |
-| Lignin delignification | 70% → RCF oil |
+| Lignin delignification | 92.8% → RCF oil |
+| Condensation extent | 0.842 — fraction of the monomer fraction that re-polymerises into oligomers during hydrogenolysis |
 | Cellulose retention in pulp | 90% |
-| RCF oil composition | 50% monomers / 25% dimers / 25% oligomers |
+| RCF oil composition | 50% monomers (before condensation) / 25% dimers / 25% oligomers; effective monomer yield = Monomers × (1 − condensation_extent) |
 | Operating basis | 330 days/yr × 24 hr/day |
 | CEPCI basis | 541.7 (2016 USD) |
 
@@ -113,11 +116,12 @@ batches/day  = 24 / tau_0  (independent of tau)
 ```
 for k = 1, 2, 3, …:
     N_total = k × N_total_base,  N_working = k × N_working_base
-    V_void        = void_frac × V_biomass          # interparticle voids = solvent volume
-    V_solvent     = V_void                         # solvent fills voids only (no dynamic term)
-    V_max         = (V_solid + V_solvent) / (1 − free_frac)  = V_biomass / (1 − free_frac)
-    Q_per_reactor = V_solvent / tau_residence      # derived from geometry
-    Q_total       = N_working × Q_per_reactor
+    V_void          = void_frac × V_biomass            # interparticle voids
+    V_excess_solvent = V_void × free_frac              # extra solvent for mass transfer
+    V_solvent        = V_void × (1 + free_frac)        # total solvent volume per bed
+    V_max            = V_solid + V_solvent             # vessel volume = wood + solvent
+    Q_per_reactor    = V_solvent / tau_residence       # derived from geometry
+    Q_total          = N_working × Q_per_reactor
     accept if V_max ≤ V_max_limit
 ```
 k reduces V_max by increasing batches_per_day (smaller biomass_per_batch → smaller V_biomass).
@@ -130,18 +134,21 @@ u_adj = Q_per_reactor / (A_new × 3600)
 ```
 `self.superficial_velocity` is updated so pressure drop uses the adjusted value.
 
-**Base case results (tau=3, tau_0=1, tau_res=1/3 hr, void_frac=0.5):**
+**Base case results (tau=3, tau_0=1, tau_res=18/60 hr (18 min), void_frac=0.5, free_frac=0.10):**
+
+Note: N_total, V_void, V_max, D/L/u are determined by bed geometry and do not change with τ_res. Q_total and derived loading scale with τ_res (shorter τ_res → faster flow → higher loading); recalculate by running the model after any τ_res change.
 
 | Quantity | Value |
 |---|---|
 | N_total / N_working | 4 / 3 |
 | Biomass per batch | 83,333 kg |
-| V_void (= V_solvent) per bed | 85.9 m³ |
-| V_max per vessel | ~191 m³ |
-| Q_total / Q_per_reactor | 773 / 258 m³/hr |
-| Derived loading | ~9.27 L/kg (consistent with Bartling et al. 9 L/kg) |
-| D / L / L/D | 3.63 m / 18.4 m / 5.0 |
-| Effective u (after L/D cap) | ~0.0069 m/s |
+| V_void per bed | 85.9 m³ |
+| V_solvent per bed | ~94.5 m³ (= V_void × 1.10) |
+| V_max per vessel | ~180 m³ |
+| Q_total / Q_per_reactor | recalculate — scales as V_solvent / τ_res |
+| Derived loading | recalculate — scales as Q_total × 1000 × 24 / dry_biomass_kgday |
+| D / L / L/D | ~3.58 m / ~17.9 m / 5.0 |
+| Effective u (after L/D cap) | ~0.0078 m/s |
 
 **`compute_Q_total()` method:** Returns Q_total [m³/hr] from geometry without side effects. Called by the `meoh_water_flow` spec in `ligsaf_system.py` on every recycle iteration to set the methanol feed flow.
 
