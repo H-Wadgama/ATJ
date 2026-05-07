@@ -11,7 +11,7 @@ feed_parameters = {
 
 # RCF
 rcf_conditions =  {
-    'T'       : 250 + 273.15,      # [K]
+    'T'       : 225 + 273.15,      # [K]
     'P'       : 60e5,              # [bar]
     'tau_s'   : 3,                 # [hr] Time on stream per solvolysis batch (3 hr total RCF, 1 hr cleaning → 4 hr cycle, 6 batches/reactor/day)
     'tau_s_res': 18/60,              # [hr] Hydraulic residence time of solvent in solvolysis bed (20 min)
@@ -23,7 +23,7 @@ free_frac      = 0.10              # [-] Fraction of reactor volume kept free (h
 
 
 
-meoh_h2o = 9                       # [ratio] Solvent : Water ratio (1:1 v/v, 50 vol% MeOH / 50 vol% H2O)
+meoh_h2o = 90                      # [ratio] Solvent : Water ratio (1:1 v/v, 50 vol% MeOH / 50 vol% H2O)
 methanol_to_biomass = 9            # [L/kg] from https://doi.org/10.1016/j.copbio.2018.12.005
                                    # Surprisingly, Bartling et al assumes a 9L/kg for a flow through
                                    # configuration which is very less.
@@ -43,7 +43,7 @@ solvolysis_parameters = {
      'Arabinan_retention' : 0.4,    # [%] Bartling et al
      'Galactan_retention' : 0.5,    # [%] Bartling et al
      'Mannan_retention' : 0.5,      # [%] Bartling et al
-     'Delignification' : 0.928,        # [%] 92.8% biomass delignified
+     'Delignification' : 0.564,        # [%] 92.8% biomass delignified
      'MeOH_CO' : 0.364/100,   # [wt%] methanol lost as CH4. From https://pubs.rsc.org/en/content/articlelanding/2015/cc/c5cc04025f Table 1 where 0.13 mol% of methanol lost as CH4 for Ru/C catalyst
                                     # reactor was batch and hydrogen was fed at 3 MPa within the reactor, also biomass was birchwood, so this might be different in my case
     'MeOH_CH4' :    0.128/100     # [wt%] methanol lost as CH4. From https://pubs.rsc.org/en/content/articlelanding/2015/cc/c5cc04025f Table 1 where 0.08 mol% of methanol lost as CH4 for Ru/C catalyst
@@ -72,7 +72,7 @@ rcf_oil_yield = {
     'Oligomers' : 0.25
 }
 
-condensation_extent = 0.842
+condensation_extent = 0.136
 
 
 
