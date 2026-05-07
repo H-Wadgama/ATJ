@@ -503,6 +503,45 @@ msp = integrated_tea.solve_price(F.RCF_Monomers)   # [USD/kg]
 
 **`Carbohydrate_Pulp` disposition (cellulosic system excluded):** When the cellulosic ethanol system is excluded, the pulp exits the combined system boundary unconnected. Setting `F.Carbohydrate_Pulp.price = prices['Feedstock']` gives it a revenue credit equal to the raw poplar cost (~0.088 USD/kg at 2016 prices). This is a lower-bound assumption — the processed, cellulose-rich pulp may command a higher market price. Update when better data are available.
 
+## Plotting Utilities (`ligsaf_plots.py`)
+
+All reusable figure-generation functions live in `ligsaf_plots.py`. Import and call them from any script or notebook after simulation is complete.
+
+### `plot_installed_cost_breakdown(categories, values, ...)`
+
+Generates a pie chart of installed cost by process area with percentage leader-line labels, a total cost annotation, and a bottom legend.
+
+```python
+from lignin_saf.ligsaf_plots import plot_installed_cost_breakdown
+
+fig, ax = plot_installed_cost_breakdown(
+    categories=["RCF Area", "Oil purification", "Monomer purification",
+                "Boiler Turbogenerator", "WasteWater Treatment"],
+    values=[rcf_area_ic, rcf_oil_purification_ic, rcf_monomer_purification_ic,
+            BT_installed_cost, WWT_installed_cost],
+    title="Installed Cost Breakdown",
+    save_path="installed_cost_breakdown.svg",   # None to skip saving
+)
+```
+
+**Parameters:**
+
+| Parameter | Default | Notes |
+|---|---|---|
+| `categories` | — | List of area label strings, one per wedge |
+| `values` | — | List of installed costs in USD, same order as `categories` |
+| `title` | `"Installed Cost Breakdown"` | Chart title |
+| `save_path` | `"installed_cost_breakdown.svg"` | Output path; extension sets format (`.svg`, `.png`, …). `None` skips saving. |
+| `dpi` | 300 | Resolution for raster formats |
+| `fig_w_px`, `fig_h_px` | 1500, 1260 | Figure dimensions in pixels |
+| `fontsize` | 13 | Base font size for all text elements |
+
+**Adding a new process area:** append to both `categories` and `values` before calling. The palette in `_OI_COLORS` has 10 slots (6 colorblind-friendly OI colors + 4 extras); a `ValueError` is raised if more areas are passed. Add entries to `_OI_COLORS` in `ligsaf_plots.py` if you need to go beyond 10.
+
+**Label placement logic:** percentage labels are placed at radii 1.14–1.38 from the pie center depending on wedge size (larger wedges get closer labels). Wedges below 5% are staggered alternately at r=1.36 and r=1.46 to avoid overlap. The total-cost annotation is placed at y=−1.72 below the pie.
+
+**Font selection:** tries Arial → Liberation Sans → DejaVu Sans in that order; falls back to DejaVu Sans if none are available. SVG output uses `svg.fonttype='none'` so text remains editable in Inkscape/Illustrator.
+
 ## Key Source Files
 
 | File | Contents |
@@ -514,6 +553,7 @@ msp = integrated_tea.solve_price(F.RCF_Monomers)   # [USD/kg]
 | `monomer_purification.py` | `create_monomer_purification_system(ins=None)` — Area 300 hexane LLE monomer/dimer separation factory function |
 | `ligsaf_utilities_system.py` | `create_rcf_utilities_system()` — Area 400 + 500; returns `(BT, WWT, gas_mixer)` |
 | `ligsaf_chemicals.py` | Chemical property definitions for the RCF system |
+| `ligsaf_plots.py` | Reusable figure-generation functions: `plot_installed_cost_breakdown` |
 | `cellulosic_tea.py` | `CellulosicEthanolTEA` class used for integrated system TEA |
 | `rcf_purification.py` | Entry-point script: builds and simulates the combined system (Areas 200–500) |
 | `rcf.py` | RCF-specific helper functions |

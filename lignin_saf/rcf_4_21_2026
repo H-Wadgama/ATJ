@@ -90,8 +90,33 @@ rcf_oil_purification_ic = sum(u.installed_cost for u in rcf_oil_purification)
 rcf_monomer_purification_ic = sum(u.installed_cost for u in monomer_purification)
 BT_installed_cost = F.BT.installed_cost
 WWT_installed_cost  = F.WWTC.installed_cost
-installed_costs_arr = np.array([rcf_area_ic, rcf_oil_purification_ic, rcf_monomer_purification_ic,
+installed_costs_arr = np.array([rcf_area_ic, rcf_oil_purification_ic, rcf_monomer_purification_ic, 
                             BT_installed_cost, WWT_installed_cost])
+
+
+from lignin_saf.ligsaf_plots import plot_installed_cost_breakdown
+
+categories = [
+    "RCF Area",
+    "Oil purification",
+    "Monomer purification",
+    "Boiler Turbogenerator",
+    "WasteWater Treatment",
+]
+
+values = [
+    rcf_area_ic,
+    rcf_oil_purification_ic,
+    rcf_monomer_purification_ic,
+    BT_installed_cost,
+    WWT_installed_cost,
+]
+
+plot_installed_cost_breakdown(
+    categories, values,
+    title="Installed Cost Breakdown",
+    save_path="installed_cost_breakdown_2.svg",
+)
 
 # --- Export net system boundary flows to CSV ---
 chem_ids = [c.ID for c in chems]
