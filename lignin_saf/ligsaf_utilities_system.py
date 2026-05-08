@@ -1,5 +1,75 @@
+from biorefineries import cellulosic
 import biosteam as bst
 from biosteam import main_flowsheet as F
+
+
+def create_cellulosic_ethanol_system_no_facilities(ins):
+    """
+    Create and simulate the cellulosic ethanol system, then strip its
+    internally-created BT and WWT from the flowsheet so the shared RCF
+    utilities can serve both subsystems without naming conflicts.
+
+    ``create_cellulosic_ethanol_system`` calls ``bst.create_all_facilities``
+    internally, which hardcodes unit IDs (M601, WWTC, R601-S604 for WWT;
+    auto-IDs for slurry_mixer, gas_mixer, BT for CHP). Those IDs conflict
+    with ``create_rcf_utilities_system``, which also creates M601, BT, etc.
+    This function must therefore be called BEFORE ``create_rcf_utilities_system``.
+
+    Parameters
+    ----------
+    ins : bst.Stream
+        Feed stream — pass ``F.Carbohydrate_Pulp``.
+
+    Returns
+    -------
+    ethanol_system : bst.System
+        Ethanol process only (U101, pretreatment, fermentation, purification,
+        S401); no BT or WWT in its facilities.
+    ww_streams : list[bst.Stream]
+        Wastewater streams that were feeding the ethanol WWT (M601).
+        Route these to the shared RCF WWT after calling
+        ``create_rcf_utilities_system``.
+    combustible_solids : list[bst.Stream]
+        Solid combustible streams (e.g. filter cake from S401) that were
+        feeding the ethanol BT's slurry slot.
+    combustible_gases : list[bst.Stream]
+        Gas combustible streams that were feeding the ethanol BT's gas slot.
+    """
+    ethanol_system = cellulosic.create_cellulosic_ethanol_system(ins=ins)
+    ethanol_system.simulate()
+
+    etoh_slurry_mixer = F.unit.slurry_mixer
+    etoh_gas_mixer    = F.unit.gas_mixer
+    etoh_M601         = F.unit.M601
+
+    combustible_solids = [s for s in etoh_slurry_mixer.ins if s.source is not None]
+    combustible_gases  = [s for s in etoh_gas_mixer.ins  if s.source is not None]
+    ww_streams         = [s for s in etoh_M601.ins       if s.source is not None]
+
+    # Patch S603 before emptying M601 so that when ethanol_system re-runs
+    # inside the combined simulation it gets zero feed and S603 doesn't raise
+    # InfeasibleRegion ("not enough water to meet moisture-content target").
+    for unit in etoh_M601.system.units:
+        if hasattr(unit, 'strict_moisture_content'):
+            unit.strict_moisture_content = False
+
+    # Disconnect streams so the removed utility units receive empty inputs on
+    # re-simulate and do not double-route streams to the shared utilities.
+    etoh_slurry_mixer.ins.clear()
+    etoh_gas_mixer.ins.clear()
+    etoh_M601.ins.clear()
+
+    etoh_BT = next(u for u in ethanol_system.facilities
+                   if isinstance(u, bst.facilities.BoilerTurbogenerator))
+    F.remove_unit_and_associated_streams(etoh_slurry_mixer.ID)
+    F.remove_unit_and_associated_streams(etoh_gas_mixer.ID)
+    F.remove_unit_and_associated_streams(etoh_BT.ID)
+
+    for uid in ('M601', 'WWTC', 'R601', 'M602', 'R602',
+                'S601', 'S602', 'M603', 'S603', 'M604', 'S604'):
+        F.remove_unit_and_associated_streams(uid)
+
+    return ethanol_system, ww_streams, combustible_solids, combustible_gases
 
 
 def create_rcf_utilities_system():

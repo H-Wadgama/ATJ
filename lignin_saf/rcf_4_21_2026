@@ -3,9 +3,9 @@ from lignin_saf.ligsaf_settings import feed_parameters, prices
 from lignin_saf.ligsaf_system import create_rcf_system
 from lignin_saf.ligsaf_purification_system import create_rcf_oil_purification_system
 from lignin_saf.monomer_purification import create_monomer_purification_system
-from lignin_saf.ligsaf_utilities_system import create_rcf_utilities_system
+from lignin_saf.ligsaf_utilities_system import (create_rcf_utilities_system,
+                                                 create_cellulosic_ethanol_system_no_facilities)
 from cellulosic_tea import create_cellulosic_ethanol_tea
-from biorefineries import cellulosic
 
 from biosteam import main_flowsheet as F
 import biosteam as bst
@@ -31,148 +31,73 @@ poplar_in = bst.Stream('Poplar_In',
                        Water=feed_parameters['moisture'] * feed_parameters['flow'] * 1e3,
                        phase='l', units='kg/d', price=prices['Feedstock'])
 
+# ── Area 200: RCF process ──────────────────────────────────────────────────
 rcf_system = create_rcf_system(ins=poplar_in)
 rcf_system.simulate()
 
+# ── Area 300: Purification ─────────────────────────────────────────────────
 rcf_oil_purification_sys = create_rcf_oil_purification_system(ins=F.RCF_Oil)
 monomer_purification_sys = create_monomer_purification_system(ins=F.Purified_RCF_Oil)
 rcf_oil_purification_sys.simulate()
 monomer_purification_sys.simulate()
+
+# ── Cellulosic ethanol co-product ──────────────────────────────────────────
+# Must precede create_rcf_utilities_system() — see function docstring.
+ethanol_system, etoh_ww, etoh_solids, etoh_gases = \
+    create_cellulosic_ethanol_system_no_facilities(ins=F.Carbohydrate_Pulp)
+
+# ── Area 400/500: Shared utilities ─────────────────────────────────────────
 BT, WWT, gas_mixer = create_rcf_utilities_system()
 
-#etoh_system = cellulosic.create_cellulosic_ethanol_system(ins = F.Carbohydrate_Pulp)
-#etoh_system.simulate()
+# Route ethanol streams into the shared RCF utilities.
+F.unit.M601.ins.extend(etoh_ww)
+solids_to_BT = bst.Mixer('MIX_BT_solids', ins=[WWT.outs[1]] + etoh_solids)
+BT.ins[0] = solids_to_BT.outs[0]
+gas_mixer.ins.extend(etoh_gases)
 
+# ── Assemble unified combined system ───────────────────────────────────────
+# ethanol_system is intentionally excluded from the path: it was already
+# converged once in create_cellulosic_ethanol_system_no_facilities, and there
+# is no recycle between rcf_system and ethanol_system, so re-running it inside
+# the combined loop adds nothing.  Including it triggers BioSTEAM's
+# update_configuration logic, which rebuilds ALL subsystem boundaries from a
+# flat unit list and incorrectly merges LLE200 (from rcf_oil_purification_sys)
+# into the ethanol system's internal path.
+# The shared utilities (WWT, BT) already receive ethanol streams via the
+# connections established above.
 rcf_combined_system = bst.System(
     'Combined_RCF_System',
     path=(rcf_system, rcf_oil_purification_sys, monomer_purification_sys, WWT),
-    facilities=[gas_mixer, BT],
+    facilities=[solids_to_BT, gas_mixer, BT],
 )
+# Re-simulate the ethanol system before each combined-system pass so that
+# when bst.Model samples parameters, the ethanol wastewater / combustible
+# stream flows (which feed the shared WWT and BT) stay consistent with the
+# current Carbohydrate_Pulp flow.  Using add_specification rather than
+# putting ethanol_system in the path avoids the update_configuration
+# re-pathing that incorrectly merges LLE200 into the ethanol system.
+@rcf_combined_system.add_specification(simulate=True)
+def update_ethanol():
+    ethanol_system.simulate()
+
 rcf_combined_system.simulate()
 rcf_combined_system.show()
 
-operators_per_section = 1  # operators per section from Seider recommendation
-num_process_sections = 3  # number of proces sections from Seider recommendation [2 reactor, 1 separation]
-num_operators_per_shift = operators_per_section * num_process_sections * 1  # multiplied by 2 for large continuous flow process (e.g., 1000 ton/day product). from Seider pg 505
-num_shifts = 5  # number of shifts
-pay_rate = 40  # $/hr
-DWandB = num_operators_per_shift * num_shifts * 2080 * pay_rate  # direct wages and benefits. DWandB [$/year] = (operators/shift)*(5 shifts)*(40 hr/week)*(operating days/year-operator)*($/hr)
-Dsalaries_benefits = 0.15 * DWandB  # direct salaries and benefits from Seider
-O_supplies = 0.06 * DWandB  # Operating supplies and services from Seider
-technical_assistance = 5 * 75000  # $/year. Technical assistance to manufacturing. assume 5 workers at $75000/year
-control_lab = 5 * 80000  # $/year. Control laboratory. assume 5 workers at $80000/year
-labor = DWandB + Dsalaries_benefits + O_supplies + technical_assistance + control_lab 
+# ── Labor (Seider methodology) ─────────────────────────────────────────────
+operators_per_section = 1
+num_process_sections = 3
+num_operators_per_shift = operators_per_section * num_process_sections * 1
+num_shifts = 5
+pay_rate = 40
+DWandB = num_operators_per_shift * num_shifts * 2080 * pay_rate
+Dsalaries_benefits = 0.15 * DWandB
+O_supplies = 0.06 * DWandB
+technical_assistance = 5 * 75000
+control_lab = 5 * 80000
+labor = DWandB + Dsalaries_benefits + O_supplies + technical_assistance + control_lab
 
-F.Carbohydrate_Pulp.price = prices['Feedstock']
-
+# ── TEA and MSP ────────────────────────────────────────────────────────────
 integrated_tea = create_cellulosic_ethanol_tea(rcf_combined_system)
 integrated_tea.labor_cost = labor
 
-print(f'The MSP for RCF monomers is  {round(integrated_tea.solve_price(F.RCF_Monomers),3)} USD/kg')
-
-
-# Different sections
-
-rcf_area= [F.MIX100, F.PUMP101, F.HX102, F.RCF103_S, F.MIX104, F.HX105, F.RCF106_H, F.FLASH107, F.PUMP108,
-F.FLASH109, F.HX110, F.PSA111, F.PUMP112, F.DIST113, F.DIST114, F.MIX116, F.HX117, F.FLASH118, F.M1, F.D601,F.M2]
-
-rcf_oil_purification = [F.MIX200, F.LLE200, F.FLASH201, F.HX202, F.CENT203]
-
-monomer_purification = [F.MIX300, F.LLE300, F.FLASH301, F.HX302, F.CENT303]
-
-BT = [BT]
-
-WWT = [WWT]
-
-
-rcf_area_ic = sum(u.installed_cost for u in rcf_area)
-rcf_oil_purification_ic = sum(u.installed_cost for u in rcf_oil_purification)
-rcf_monomer_purification_ic = sum(u.installed_cost for u in monomer_purification)
-BT_installed_cost = F.BT.installed_cost
-WWT_installed_cost  = F.WWTC.installed_cost
-installed_costs_arr = np.array([rcf_area_ic, rcf_oil_purification_ic, rcf_monomer_purification_ic, 
-                            BT_installed_cost, WWT_installed_cost])
-
-
-from lignin_saf.ligsaf_plots import plot_installed_cost_breakdown
-
-categories = [
-    "RCF Area",
-    "Oil purification",
-    "Monomer purification",
-    "Boiler Turbogenerator",
-    "WasteWater Treatment",
-]
-
-values = [
-    rcf_area_ic,
-    rcf_oil_purification_ic,
-    rcf_monomer_purification_ic,
-    BT_installed_cost,
-    WWT_installed_cost,
-]
-
-plot_installed_cost_breakdown(
-    categories, values,
-    title="Installed Cost Breakdown",
-    save_path="installed_cost_breakdown_2.svg",
-)
-
-# --- Export net system boundary flows to CSV ---
-chem_ids = [c.ID for c in chems]
-
-rows = []
-for s in rcf_combined_system.feeds:
-    comp_flows = {c: s.imass[c] for c in chem_ids}
-    rows.append({'Stream': s.ID, 'Direction': 'Input', 'Phase': s.phase,
-                 'Total_kg_hr': s.F_mass, **comp_flows})
-for s in rcf_combined_system.products:
-    comp_flows = {c: s.imass[c] for c in chem_ids}
-    rows.append({'Stream': s.ID, 'Direction': 'Output', 'Phase': s.phase,
-                 'Total_kg_hr': s.F_mass, **comp_flows})
-
-df = pd.DataFrame(rows).set_index(['Stream', 'Direction', 'Phase', 'Total_kg_hr'])
-# Drop columns where every stream has zero flow
-df = df.loc[:, (df != 0).any(axis=0)]
-df = df.reset_index()
-df.to_csv('rcf_system_boundary_flows.csv', index=False)
-print('Saved rcf_system_boundary_flows.csv')
-
-
-from lignin_saf.ligsaf_plots import plot_operating_cost_breakdown
-
-# Operating costs plot
-methanol_price = F.Meoh_in.F_mass * prices['Methanol'] * integrated_tea.operating_hours
-hydrogen_price = F.Hydrogen_In.F_mass * prices['Hydrogen'] * integrated_tea.operating_hours
-poplar_price = F.Poplar_In.F_mass * prices['Feedstock'] * integrated_tea.operating_hours
-ethyl_acetate_price = F.EthylAcetate_in.F_mass * prices['EthylAcetate'] * integrated_tea.operating_hours
-hexane_price = F.Hexane_In.F_mass * prices['Hexane'] * integrated_tea.operating_hours
-catalyst_cost = F.RCF_Catalyst.F_mass * prices['NiC_catalyst'] * integrated_tea.operating_hours
-
-opex_categories = [
-    "Methanol",
-    "Hydrogen",
-    "Poplar",
-    "Ethyl Acetate",
-    "Hexane",
-    "NiC catalyst",
-    "Utilities",
-    "Fixed Operating Cost",
-]
-
-opex_values = [
-    methanol_price,
-    hydrogen_price,
-    poplar_price,
-    ethyl_acetate_price,
-    hexane_price,
-    catalyst_cost,
-    integrated_tea.utility_cost,
-    integrated_tea.FOC,
-]
-
-plot_operating_cost_breakdown(
-    opex_categories, opex_values,
-    title="Annual Operating Cost Breakdown",
-    save_path="operating_breakdown_2.svg",
-)
+print(f'The MSP for RCF monomers is  {round(integrated_tea.solve_price(F.RCF_Monomers), 3)} USD/kg')

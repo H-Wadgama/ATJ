@@ -397,52 +397,83 @@ BioSTEAM's BT auto-derives combustion reactions from a chemical's elemental form
 - WWT: add streams to the `ins` tuple inside `create_rcf_utilities_system()`.
 - BT: each combustion slot takes one stream; use a `bst.Mixer` to combine multiple feeds, add the mixer to `facilities` before BT, and wire `BT.ins[0]` or `BT.ins[1]` to the mixer outlet.
 
-## Unified utilities for the integrated biorefinery (planned)
+## Unified utilities for the integrated biorefinery
 
-When `etoh_system` is included, drop `create_rcf_utilities_system()` entirely and use the cellulosic system's BT and WWT as the single biorefinery-wide utilities.
+`rcf_4_21_2026` integrates the cellulosic ethanol co-product using the RCF utilities (BT, WWT) as the shared biorefinery-wide utilities. The ethanol system's internally-created BT and WWT are removed with `F.remove_unit_and_associated_streams()`, and the ethanol streams are re-routed to the shared RCF utilities.
 
-**How the cellulosic system creates utilities:** `create_cellulosic_ethanol_system` calls `bst.create_all_facilities(autopopulate=True)` internally, which creates:
-- `WWT` (conventional, Humbird 2011) with inlet mixer `M601` — `autopopulate=True`
-- `BT` (`BoilerTurbogenerator`) with internal `slurry_mixer` and `gas_mixer` — `autopopulate=True`
+**Naming-conflict constraint — why ordering matters:**
 
-**Why not rely on autopopulate:** The autopopulate spec fires only once and only if `not mixer.ins`. If any subsystem (e.g. `etoh_system`) is simulated before the combined system is assembled, autopopulate fires within that subsystem's stream scope. The RCF streams are missed because they are not yet visible. Explicit injection is therefore required.
+`create_cellulosic_ethanol_system` calls `bst.create_all_facilities` internally, which creates units with hardcoded IDs:
+- WWT: `M601`, `WWTC`, `R601`, `M602`, `R602`, `S601`, `S602`, `M603`, `S603`, `M604`, `S604`
+- CHP: `slurry_mixer` (alias; actual ID is auto-assigned), `gas_mixer` (alias; auto-assigned), `BT` (auto-assigned)
 
-**Implementation pattern (no intermediate `.simulate()` calls before combined assembly):**
+`create_rcf_utilities_system()` also creates `M601` (inside WWT) and `BT` (explicit). If the RCF utilities are created first, BioSTEAM's `AUTORENAME` renames the existing unit (e.g. `M601` → `M601_1`), breaking references inside the already-assembled WWT system.
+
+**Solution:** create the ethanol system **before** `create_rcf_utilities_system()`. The ethanol system claims those IDs first; `F.remove_unit_and_associated_streams()` frees them; then the RCF utilities claim them cleanly.
+
+**Implementation pattern (as in `rcf_4_21_2026`):**
 
 ```python
-rcf_system               = create_rcf_system(ins=poplar_in)
+# 1. Create process subsystems and simulate
+rcf_system               = create_rcf_system(ins=poplar_in);      rcf_system.simulate()
 rcf_oil_purification_sys = create_rcf_oil_purification_system(ins=F.RCF_Oil)
 monomer_purification_sys = create_monomer_purification_system(ins=F.Purified_RCF_Oil)
-etoh_system              = cellulosic.create_cellulosic_ethanol_system(ins=F.Carbohydrate_Pulp)
-# Do NOT call create_rcf_utilities_system()
+rcf_oil_purification_sys.simulate(); monomer_purification_sys.simulate()
 
-# Add RCF wastewater to unified WWT inlet mixer
-M601 = bst.main_flowsheet.unit.M601
-for sid in ('WW_10', 'WastePulp', 'RCF_WW', 'WW_11', 'WW_12'):
-    M601.ins.append(bst.main_flowsheet.stream[sid])
-M601.autopopulate = False  # prevent double-collection on combined simulate
+# 2. Ethanol system — BEFORE create_rcf_utilities_system()
+ethanol_system = cellulosic.create_cellulosic_ethanol_system(ins=F.Carbohydrate_Pulp)
+ethanol_system.simulate()
 
-# Add PSA purge gas to unified BT gas mixer
-bst.main_flowsheet.unit.gas_mixer.ins.append(F.Purge_Light_Gases)
+# 3. Save ethanol streams feeding its utilities, then disconnect them
+etoh_slurry_mixer = F.unit.slurry_mixer
+etoh_gas_mixer    = F.unit.gas_mixer
+etoh_M601         = F.unit.M601
+etoh_combustible_solids = [s for s in etoh_slurry_mixer.ins if s.source is not None]
+etoh_combustible_gases  = [s for s in etoh_gas_mixer.ins  if s.source is not None]
+etoh_ww_streams         = [s for s in etoh_M601.ins       if s.source is not None]
+etoh_slurry_mixer.ins.clear()   # prevent double-routing on re-simulate
+etoh_gas_mixer.ins.clear()
+etoh_M601.ins.clear()
 
-# Patch strict_moisture_content on the unified WWT
-for unit in M601.system.units:
-    if hasattr(unit, 'strict_moisture_content'):
-        unit.strict_moisture_content = False
+# 4. Remove ethanol system's BT and WWT from the flowsheet
+etoh_BT = next(u for u in ethanol_system.facilities
+               if isinstance(u, bst.facilities.BoilerTurbogenerator))
+F.remove_unit_and_associated_streams(etoh_slurry_mixer.ID)  # use actual ID, not alias
+F.remove_unit_and_associated_streams(etoh_gas_mixer.ID)
+F.remove_unit_and_associated_streams(etoh_BT.ID)
+for uid in ('M601', 'WWTC', 'R601', 'M602', 'R602',
+            'S601', 'S602', 'M603', 'S603', 'M604', 'S604'):
+    F.remove_unit_and_associated_streams(uid)
 
-# Assemble — etoh_system's facilities already contain WWT and BT
+# 5. Create RCF utilities — IDs are now free
+BT, WWT, gas_mixer = create_rcf_utilities_system()
+
+# 6. Re-route ethanol streams into shared RCF utilities
+F.unit.M601.ins.extend(etoh_ww_streams)
+solids_to_BT = bst.Mixer('MIX_BT_solids', ins=[WWT.outs[1]] + etoh_combustible_solids)
+BT.ins[0] = solids_to_BT.outs[0]
+gas_mixer.ins.extend(etoh_combustible_gases)
+
+# 7. Assemble unified combined system
 rcf_combined_system = bst.System(
     'Combined_RCF_System',
-    path=(rcf_system, rcf_oil_purification_sys, monomer_purification_sys, etoh_system),
+    path=(rcf_system, rcf_oil_purification_sys, monomer_purification_sys,
+          ethanol_system, WWT),
+    facilities=[solids_to_BT, gas_mixer, BT],
 )
 rcf_combined_system.simulate()
 ```
 
+**`F.remove_unit_and_associated_streams(ID)` API details:**
+- Method of the **flowsheet** (`F`), not a System or Unit.
+- Argument is a **string ID**, not a unit object or alias. For `slurry_mixer`/`gas_mixer` use `unit.ID` (the auto-assigned numeric ID) rather than the alias string.
+- Removes the unit from the registry and discards any inlet/outlet streams that have no source/sink respectively.
+- Does NOT remove the unit from `ethanol_system.facilities` or clear stream `._sink` attributes — those removed units re-run with empty inputs when the combined system re-simulates the ethanol system, which is harmless.
+
 **Notes:**
-- Verify unit IDs `M601`, `gas_mixer`, `slurry_mixer` on the flowsheet after creating `etoh_system` — they may carry area prefixes in future BioSTEAM versions.
-- `Purge_Light_Gases` is combustible (CH4, H2, CO) → goes to `gas_mixer` → BT, never to WWT.
-- WWT biogas is already internally routed to the BT's `gas_mixer` inside `create_coheat_and_power_system`.
-- The `strict_moisture_content=False` patch is still needed — the Acetate accumulation issue applies regardless of which WWT instance is used.
+- `Purge_Light_Gases` (PSA purge) is already in `gas_mixer.ins` because `create_rcf_utilities_system()` wires it there via `F.Purge_Light_Gases`.
+- The `strict_moisture_content=False` patch in `create_rcf_utilities_system()` is still applied to the shared RCF WWT.
+- `solids_to_BT` must appear before `BT` in the facilities list so its outlet is populated before BT consumes it.
 
 ## TEA
 
