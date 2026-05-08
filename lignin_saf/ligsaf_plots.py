@@ -10,11 +10,10 @@ _OI_COLORS = [
     "#0072B2",  # blue
     "#D55E00",  # vermillion
     "#CC79A7",  # reddish purple
-    # extended palette for >6 areas
+    "#476066",  # dark teal
+    "#562C29",  # dark brown
     "#009E73",  # bluish green
     "#999999",  # grey
-    "#F781BF",  # pink
-    "#A65628",  # brown
 ]
 
 
@@ -33,41 +32,18 @@ def _setup_fonts():
     return chosen
 
 
-def plot_installed_cost_breakdown(
+def _pie_chart(
     categories,
     values,
-    title="Installed Cost Breakdown",
-    save_path="installed_cost_breakdown.svg",
-    dpi=300,
-    fig_w_px=1500,
-    fig_h_px=1260,
-    fontsize=13,
+    title,
+    save_path,
+    dpi,
+    fig_w_px,
+    fig_h_px,
+    fontsize,
+    ncol,
+    legend_bottom,
 ):
-    """
-    Generate a pie chart of installed cost by process area.
-
-    Parameters
-    ----------
-    categories : list[str]
-        Area labels, one per wedge.
-    values : list[float]
-        Installed costs in USD, same order as categories.
-    title : str
-        Chart title.
-    save_path : str or None
-        Output file path. Extension determines format (.svg, .png, …).
-        Pass None to skip saving.
-    dpi : int
-        Resolution for raster formats.
-    fig_w_px, fig_h_px : int
-        Figure dimensions in pixels (used with dpi to set figure size in inches).
-    fontsize : int
-        Base font size for title, percentages, total label, and legend.
-
-    Returns
-    -------
-    fig, ax
-    """
     _setup_fonts()
 
     n = len(categories)
@@ -131,8 +107,6 @@ def plot_installed_cost_breakdown(
     ax.set_xlim(-1.65, 1.65)
     ax.set_ylim(-1.95, 1.50)
 
-    # legend — use 3 columns, wrapping to a 4th if needed
-    ncol = min(3, n)
     handles = [
         mpatches.Patch(facecolor=c, edgecolor="white", linewidth=0.8, label=lbl)
         for c, lbl in zip(colors, categories)
@@ -150,10 +124,90 @@ def plot_installed_cost_breakdown(
         bbox_to_anchor=(0.5, 0.0),
     )
 
-    fig.tight_layout(rect=[0, 0.14, 1, 1])
+    fig.tight_layout(rect=[0, legend_bottom, 1, 1])
 
     if save_path is not None:
         fmt = save_path.rsplit(".", 1)[-1] if "." in save_path else "svg"
         fig.savefig(save_path, format=fmt, dpi=dpi, bbox_inches="tight")
 
     return fig, ax
+
+
+def plot_installed_cost_breakdown(
+    categories,
+    values,
+    title="Installed Cost Breakdown",
+    save_path="installed_cost_breakdown.svg",
+    dpi=300,
+    fig_w_px=1500,
+    fig_h_px=1260,
+    fontsize=13,
+):
+    """
+    Pie chart of installed capital cost by process area.
+
+    Parameters
+    ----------
+    categories : list[str]
+        Area labels, one per wedge.
+    values : list[float]
+        Installed costs in USD, same order as categories.
+    title : str
+        Chart title.
+    save_path : str or None
+        Output path; extension sets format (.svg, .png, …). None skips saving.
+    dpi : int
+        Resolution for raster formats.
+    fig_w_px, fig_h_px : int
+        Figure size in pixels.
+    fontsize : int
+        Base font size for all text elements.
+
+    Returns
+    -------
+    fig, ax
+    """
+    return _pie_chart(
+        categories, values, title, save_path, dpi, fig_w_px, fig_h_px,
+        fontsize, ncol=min(3, len(categories)), legend_bottom=0.14,
+    )
+
+
+def plot_operating_cost_breakdown(
+    categories,
+    values,
+    title="Annual Operating Cost Breakdown",
+    save_path="operating_cost_breakdown.svg",
+    dpi=300,
+    fig_w_px=1500,
+    fig_h_px=1260,
+    fontsize=13,
+):
+    """
+    Pie chart of annual operating cost by cost item.
+
+    Parameters
+    ----------
+    categories : list[str]
+        Cost-item labels, one per wedge.
+    values : list[float]
+        Annual costs in USD/yr, same order as categories.
+    title : str
+        Chart title.
+    save_path : str or None
+        Output path; extension sets format (.svg, .png, …). None skips saving.
+    dpi : int
+        Resolution for raster formats.
+    fig_w_px, fig_h_px : int
+        Figure size in pixels.
+    fontsize : int
+        Base font size for all text elements.
+
+    Returns
+    -------
+    fig, ax
+    """
+    return _pie_chart(
+        categories, values, title, save_path, dpi, fig_w_px, fig_h_px,
+        fontsize, ncol=min(4, len(categories)), legend_bottom=0.10,
+    )

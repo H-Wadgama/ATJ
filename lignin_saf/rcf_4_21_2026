@@ -137,3 +137,42 @@ df = df.loc[:, (df != 0).any(axis=0)]
 df = df.reset_index()
 df.to_csv('rcf_system_boundary_flows.csv', index=False)
 print('Saved rcf_system_boundary_flows.csv')
+
+
+from lignin_saf.ligsaf_plots import plot_operating_cost_breakdown
+
+# Operating costs plot
+methanol_price = F.Meoh_in.F_mass * prices['Methanol'] * integrated_tea.operating_hours
+hydrogen_price = F.Hydrogen_In.F_mass * prices['Hydrogen'] * integrated_tea.operating_hours
+poplar_price = F.Poplar_In.F_mass * prices['Feedstock'] * integrated_tea.operating_hours
+ethyl_acetate_price = F.EthylAcetate_in.F_mass * prices['EthylAcetate'] * integrated_tea.operating_hours
+hexane_price = F.Hexane_In.F_mass * prices['Hexane'] * integrated_tea.operating_hours
+catalyst_cost = F.RCF_Catalyst.F_mass * prices['NiC_catalyst'] * integrated_tea.operating_hours
+
+opex_categories = [
+    "Methanol",
+    "Hydrogen",
+    "Poplar",
+    "Ethyl Acetate",
+    "Hexane",
+    "NiC catalyst",
+    "Utilities",
+    "Fixed Operating Cost",
+]
+
+opex_values = [
+    methanol_price,
+    hydrogen_price,
+    poplar_price,
+    ethyl_acetate_price,
+    hexane_price,
+    catalyst_cost,
+    integrated_tea.utility_cost,
+    integrated_tea.FOC,
+]
+
+plot_operating_cost_breakdown(
+    opex_categories, opex_values,
+    title="Annual Operating Cost Breakdown",
+    save_path="operating_breakdown_2.svg",
+)

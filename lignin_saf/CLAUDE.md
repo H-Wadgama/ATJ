@@ -536,11 +536,49 @@ fig, ax = plot_installed_cost_breakdown(
 | `fig_w_px`, `fig_h_px` | 1500, 1260 | Figure dimensions in pixels |
 | `fontsize` | 13 | Base font size for all text elements |
 
-**Adding a new process area:** append to both `categories` and `values` before calling. The palette in `_OI_COLORS` has 10 slots (6 colorblind-friendly OI colors + 4 extras); a `ValueError` is raised if more areas are passed. Add entries to `_OI_COLORS` in `ligsaf_plots.py` if you need to go beyond 10.
+**Adding a new process area:** append to both `categories` and `values` before calling. The palette in `_OI_COLORS` has 10 slots; a `ValueError` is raised if more areas are passed. Add entries to `_OI_COLORS` in `ligsaf_plots.py` if you need to go beyond 10.
 
 **Label placement logic:** percentage labels are placed at radii 1.14–1.38 from the pie center depending on wedge size (larger wedges get closer labels). Wedges below 5% are staggered alternately at r=1.36 and r=1.46 to avoid overlap. The total-cost annotation is placed at y=−1.72 below the pie.
 
 **Font selection:** tries Arial → Liberation Sans → DejaVu Sans in that order; falls back to DejaVu Sans if none are available. SVG output uses `svg.fonttype='none'` so text remains editable in Inkscape/Illustrator.
+
+### `plot_operating_cost_breakdown(categories, values, ...)`
+
+Identical pie-chart layout as `plot_installed_cost_breakdown`, but defaults to `ncol=4` in the legend and a tighter bottom margin (`legend_bottom=0.10`) to fit the wider legend row.
+
+```python
+from lignin_saf.ligsaf_plots import plot_operating_cost_breakdown
+
+fig, ax = plot_operating_cost_breakdown(
+    categories=["Methanol", "Hydrogen", "Poplar", "Ethyl Acetate",
+                "Hexane", "NiC catalyst", "Utilities", "Fixed Operating Cost"],
+    values=[methanol_price, hydrogen_price, poplar_price, ethyl_acetate_price,
+            hexane_price, catalyst_cost, integrated_tea.utility_cost, integrated_tea.FOC],
+    title="Annual Operating Cost Breakdown",
+    save_path="operating_breakdown.svg",   # None to skip saving
+)
+```
+
+Parameters are identical to `plot_installed_cost_breakdown`; `values` should be annual costs in USD/yr.
+
+### Shared color palette (`_OI_COLORS`)
+
+Both functions draw from the same 10-entry palette in order:
+
+| Slot | Hex | Color |
+|---|---|---|
+| 0 | `#E69F00` | orange |
+| 1 | `#56B4E9` | sky blue |
+| 2 | `#F0E442` | yellow |
+| 3 | `#0072B2` | blue |
+| 4 | `#D55E00` | vermillion |
+| 5 | `#CC79A7` | reddish purple |
+| 6 | `#476066` | dark teal |
+| 7 | `#562C29` | dark brown |
+| 8 | `#009E73` | bluish green |
+| 9 | `#999999` | grey |
+
+Slots 0–5 are colorblind-friendly (Wong 2011). Add new entries at the end if more than 10 areas are needed.
 
 ## Key Source Files
 
