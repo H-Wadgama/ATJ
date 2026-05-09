@@ -1,10 +1,33 @@
+
+# Latest implementation of ethanol system in RCF
+'''
+What simulate=True does: it sets simulate_after_specifications = True on the combined system,
+   so the execution order on each rcf_combined_system.simulate() call is:
+
+  1. update_ethanol() spec fires → ethanol_system.simulate() updates the ethanol
+  wastewater/combustible stream flows
+  2. rcf_combined_system then runs its own path (RCF + purification + WWT) and facilities (BT)
+
+  For bst.Model, each sample evaluation calls rcf_combined_system.simulate(), which
+  automatically re-runs step 1 first. So if you add parameters that affect Carbohydrate_Pulp
+  flow (e.g., cellulose retention), the ethanol system will re-converge and the WWT/BT loads
+  will correctly track the change.
+
+
+  For bst.Model, each sample evaluation calls rcf_combined_system.simulate(), which
+  automatically re-runs step 1 first. So if you add parameters that affect Carbohydrate_Pulp
+  flow (e.g., cellulose retention), the ethanol system will re-converge and the WWT/BT loads
+  will correctly track the change.
+'''
+
+
 from lignin_saf.ligsaf_chemicals import create_chemicals
 from lignin_saf.ligsaf_settings import feed_parameters, prices
 from lignin_saf.ligsaf_system import create_rcf_system
 from lignin_saf.ligsaf_purification_system import create_rcf_oil_purification_system
 from lignin_saf.monomer_purification import create_monomer_purification_system
-from lignin_saf.ligsaf_utilities_system import create_rcf_utilities_system
-from lignin_saf.ethanol_production import create_cellulosic_ethanol_system
+from lignin_saf.ligsaf_utilities_system import (create_rcf_utilities_system,
+                                                 create_cellulosic_ethanol_system_no_facilities)
 from cellulosic_tea import create_cellulosic_ethanol_tea
 
 from biosteam import main_flowsheet as F
@@ -42,25 +65,9 @@ rcf_oil_purification_sys.simulate()
 monomer_purification_sys.simulate()
 
 # ── Cellulosic ethanol co-product ──────────────────────────────────────────
-# create_cellulosic_ethanol_system omits BT (CHP) and WWT via WWT=False,
-# CHP=False in its create_all_facilities call, so no ID conflicts arise
-# with the shared RCF utilities created below.
-ethanol_system = create_cellulosic_ethanol_system(ins=F.Carbohydrate_Pulp)
-ethanol_system.simulate()
-
-# Identify streams from the ethanol system that need routing to the shared
-# BT and WWT. After simulation, these are the unconnected non-product outlets:
-#   etoh_gases  — fermentation CO2 and other gas-phase off-gases → BT gas slot
-#   etoh_solids — S401 filter cake (combustible slurry) → BT slurry slot
-#   etoh_ww     — liquid filtrate and pretreatment wastes → shared WWT
-etoh_product = set(ethanol_system.outs)
-etoh_unrouted = [s for s in ethanol_system.streams
-                 if s.sink is None and s.source is not None
-                 and s not in etoh_product and s.F_mass > 0]
-etoh_gases  = [s for s in etoh_unrouted if s.phase == 'g']
-etoh_solids = [F.unit.S401.outs[0]]
-etoh_ww     = [s for s in etoh_unrouted
-               if s not in etoh_gases and s is not F.unit.S401.outs[0]]
+# Must precede create_rcf_utilities_system() — see function docstring.
+ethanol_system, etoh_ww, etoh_solids, etoh_gases = \
+    create_cellulosic_ethanol_system_no_facilities(ins=F.Carbohydrate_Pulp)
 
 # ── Area 400/500: Shared utilities ─────────────────────────────────────────
 BT, WWT, gas_mixer = create_rcf_utilities_system()
@@ -71,18 +78,27 @@ solids_to_BT = bst.Mixer('MIX_BT_solids', ins=[WWT.outs[1]] + etoh_solids)
 BT.ins[0] = solids_to_BT.outs[0]
 gas_mixer.ins.extend(etoh_gases)
 
-# ethanol_system is kept out of the combined path deliberately.
-# Including it triggers BioSTEAM's update_configuration, which rebuilds all
-# subsystem boundaries from a flat unit list and incorrectly pulls LLE200
-# (from rcf_oil_purification_sys) inside the ethanol system's boundary.
-# The add_specification below re-simulates it before every combined pass
-# so that WWT and BT loads stay live when bst.Model samples parameters.
+# ── Assemble unified combined system ───────────────────────────────────────
+# ethanol_system is intentionally excluded from the path: it was already
+# converged once in create_cellulosic_ethanol_system_no_facilities, and there
+# is no recycle between rcf_system and ethanol_system, so re-running it inside
+# the combined loop adds nothing.  Including it triggers BioSTEAM's
+# update_configuration logic, which rebuilds ALL subsystem boundaries from a
+# flat unit list and incorrectly merges LLE200 (from rcf_oil_purification_sys)
+# into the ethanol system's internal path.
+# The shared utilities (WWT, BT) already receive ethanol streams via the
+# connections established above.
 rcf_combined_system = bst.System(
     'Combined_RCF_System',
     path=(rcf_system, rcf_oil_purification_sys, monomer_purification_sys, WWT),
     facilities=[solids_to_BT, gas_mixer, BT],
 )
-
+# Re-simulate the ethanol system before each combined-system pass so that
+# when bst.Model samples parameters, the ethanol wastewater / combustible
+# stream flows (which feed the shared WWT and BT) stay consistent with the
+# current Carbohydrate_Pulp flow.  Using add_specification rather than
+# putting ethanol_system in the path avoids the update_configuration
+# re-pathing that incorrectly merges LLE200 into the ethanol system.
 @rcf_combined_system.add_specification(simulate=True)
 def update_ethanol():
     ethanol_system.simulate()
