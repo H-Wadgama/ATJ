@@ -61,6 +61,7 @@ Current design includes Area 200, 300, 400, and 500. Areas 100, 600, and 700 are
 | `ligsaf_system.py` | `create_rcf_system(ins=None)` — Area 200 factory function |
 | `ligsaf_purification_system.py` | `create_rcf_oil_purification_system(ins=None)` — Area 300 EtOAc LLE factory function |
 | `monomer_purification.py` | `create_monomer_purification_system(ins=None)` — Area 300 hexane LLE monomer/dimer separation factory function |
+| `ethanol_production.py` | Local `create_cellulosic_ethanol_system` with `WWT=False, CHP=False`; no BT or WWT created — shared RCF utilities serve the full biorefinery |
 | `ligsaf_utilities_system.py` | `create_rcf_utilities_system()` — Area 400 + 500 factory function; returns `(BT, WWT, gas_mixer)` |
 | `ligsaf_units.py` | Custom BioSTEAM unit classes: `SolvolysisReactor`, `HydrogenolysisReactor`, `PSA`, `CatalystMixer` |
 | `ligsaf_settings.py` | All process parameters, prices, biomass composition, partition coefficients |
@@ -155,50 +156,46 @@ BT.ins[0] = solid_mixer.outs[0]
 ```
 
 
-## Unified utilities for integrated biorefinery (planned)
+## Unified utilities for the integrated biorefinery
 
-When the cellulosic ethanol system is included in the combined simulation, the RCF system's own `create_rcf_utilities_system()` should be dropped and replaced by the cellulosic system's built-in BT and WWT, which are created with `autopopulate=True`. The cellulosic BT uses an internal `slurry_mixer` and `gas_mixer`; the cellulosic WWT uses an internal `M601` wastewater mixer.
+The cellulosic ethanol co-product uses the shared RCF utilities (BT, WWT) rather than its own. `ethanol_production.py` provides a local `create_cellulosic_ethanol_system` that passes `WWT=False, CHP=False` to `bst.create_all_facilities`, so no BT or WWT is ever created inside the ethanol system. This avoids all ID conflicts without post-hoc unit removal.
 
-**Why autopopulate alone is not sufficient:** `autopopulate` fires once at first simulate, but only if the relevant mixer is still empty (`not mixer.ins`). If `etoh_system.simulate()` is called before the combined system is assembled, autopopulate fires within the cellulosic subsystem scope only — RCF streams are then missed when the combined system is simulated. Explicit stream injection is therefore required.
-
-**Implementation pattern:**
+After simulating the ethanol system, unconnected outlet streams are identified and routed into the shared utilities. The ethanol system is kept out of the combined system path to avoid BioSTEAM's `update_configuration` subsystem-boundary rebuild; instead it is re-simulated via `add_specification(simulate=True)` before every combined-system pass, which keeps WWT and BT loads current when `bst.Model` samples parameters.
 
 ```python
-# Build all upstream systems first (no intermediate .simulate() calls)
-rcf_system               = create_rcf_system(ins=poplar_in)
-rcf_oil_purification_sys = create_rcf_oil_purification_system(ins=F.RCF_Oil)
-monomer_purification_sys = create_monomer_purification_system(ins=F.Purified_RCF_Oil)
-etoh_system              = cellulosic.create_cellulosic_ethanol_system(ins=F.Carbohydrate_Pulp)
-# NOTE: do NOT call create_rcf_utilities_system() — use the cellulosic system's BT/WWT instead
+from lignin_saf.ethanol_production import create_cellulosic_ethanol_system
 
-# Inject RCF wastewater streams into the unified WWT inlet mixer
-M601 = bst.main_flowsheet.unit.M601
-for sid in ('WW_10', 'WastePulp', 'RCF_WW', 'WW_11', 'WW_12'):
-    M601.ins.append(bst.main_flowsheet.stream[sid])
-M601.autopopulate = False  # prevent double-collection at combined simulate time
+ethanol_system = create_cellulosic_ethanol_system(ins=F.Carbohydrate_Pulp)
+ethanol_system.simulate()
 
-# Inject RCF PSA purge gas into the unified BT gas mixer
-gas_mixer = bst.main_flowsheet.unit.gas_mixer
-gas_mixer.ins.append(F.Purge_Light_Gases)
+# Identify streams for shared utility routing
+etoh_product  = set(ethanol_system.outs)
+etoh_unrouted = [s for s in ethanol_system.streams
+                 if s.sink is None and s.source is not None
+                 and s not in etoh_product and s.F_mass > 0]
+etoh_gases  = [s for s in etoh_unrouted if s.phase == 'g']   # → BT gas slot
+etoh_solids = [F.unit.S401.outs[0]]                           # → BT slurry slot
+etoh_ww     = [s for s in etoh_unrouted
+               if s not in etoh_gases and s is not F.unit.S401.outs[0]]  # → WWT
 
-# Apply strict_moisture_content patch to the unified WWT
-for unit in bst.main_flowsheet.unit.M601.system.units:
-    if hasattr(unit, 'strict_moisture_content'):
-        unit.strict_moisture_content = False
+BT, WWT, gas_mixer = create_rcf_utilities_system()
+F.unit.M601.ins.extend(etoh_ww)
+solids_to_BT = bst.Mixer('MIX_BT_solids', ins=[WWT.outs[1]] + etoh_solids)
+BT.ins[0] = solids_to_BT.outs[0]
+gas_mixer.ins.extend(etoh_gases)
 
-# Assemble — cellulosic system's facilities already contain WWT and BT
 rcf_combined_system = bst.System(
     'Combined_RCF_System',
-    path=(rcf_system, rcf_oil_purification_sys, monomer_purification_sys, etoh_system),
+    path=(rcf_system, rcf_oil_purification_sys, monomer_purification_sys, WWT),
+    facilities=[solids_to_BT, gas_mixer, BT],
 )
+
+@rcf_combined_system.add_specification(simulate=True)
+def update_ethanol():
+    ethanol_system.simulate()
+
 rcf_combined_system.simulate()
 ```
-
-**Key points:**
-- Unit IDs `M601`, `gas_mixer`, `slurry_mixer` are created inside `create_cellulosic_ethanol_system` via `bst.create_all_facilities`. Verify these IDs on the flowsheet after creating `etoh_system` if they have changed between BioSTEAM versions.
-- The `strict_moisture_content=False` patch is still needed on the unified WWT — the Acetate accumulation issue is present regardless of which WWT instance is used.
-- `Purge_Light_Gases` (PSA purge gas) has high combustion energy and qualifies as a combustible gas — it goes to `gas_mixer` → BT, not to WWT.
-- WWT biogas (`M601.system.outs[0]`) is already internally routed to the BT's `gas_mixer` inside `create_coheat_and_power_system`.
 
 
 ## TEA (Techno-Economic Analysis)

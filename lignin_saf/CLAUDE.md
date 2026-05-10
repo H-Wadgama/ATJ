@@ -399,81 +399,101 @@ BioSTEAM's BT auto-derives combustion reactions from a chemical's elemental form
 
 ## Unified utilities for the integrated biorefinery
 
-`rcf_4_21_2026` integrates the cellulosic ethanol co-product using the RCF utilities (BT, WWT) as the shared biorefinery-wide utilities. The ethanol system's internally-created BT and WWT are removed with `F.remove_unit_and_associated_streams()`, and the ethanol streams are re-routed to the shared RCF utilities.
+`rcf_4_21_2026` integrates the cellulosic ethanol co-product using the shared RCF utilities (BT, WWT) as the biorefinery-wide utilities. The local `ethanol_production.py` provides `create_cellulosic_ethanol_system` with `WWT=False, CHP=False` passed to `bst.create_all_facilities`, so the ethanol system never creates its own BT or WWT. This eliminates the ID-conflict problem entirely — no post-hoc unit removal is needed.
 
-**Naming-conflict constraint — why ordering matters:**
+**Stream routing — how ethanol streams reach the shared utilities:**
 
-`create_cellulosic_ethanol_system` calls `bst.create_all_facilities` internally, which creates units with hardcoded IDs:
-- WWT: `M601`, `WWTC`, `R601`, `M602`, `R602`, `S601`, `S602`, `M603`, `S603`, `M604`, `S604`
-- CHP: `slurry_mixer` (alias; actual ID is auto-assigned), `gas_mixer` (alias; auto-assigned), `BT` (auto-assigned)
-
-`create_rcf_utilities_system()` also creates `M601` (inside WWT) and `BT` (explicit). If the RCF utilities are created first, BioSTEAM's `AUTORENAME` renames the existing unit (e.g. `M601` → `M601_1`), breaking references inside the already-assembled WWT system.
-
-**Solution:** create the ethanol system **before** `create_rcf_utilities_system()`. The ethanol system claims those IDs first; `F.remove_unit_and_associated_streams()` frees them; then the RCF utilities claim them cleanly.
-
-**Implementation pattern (as in `rcf_4_21_2026`):**
+After `ethanol_system.simulate()`, streams that would normally have gone to the ethanol BT/WWT are unconnected outlets. They are identified by inspecting the flowsheet for non-product sinks-free streams:
 
 ```python
-# 1. Create process subsystems and simulate
-rcf_system               = create_rcf_system(ins=poplar_in);      rcf_system.simulate()
+etoh_product  = set(ethanol_system.outs)
+etoh_unrouted = [s for s in ethanol_system.streams
+                 if s.sink is None and s.source is not None
+                 and s not in etoh_product and s.F_mass > 0]
+etoh_gases  = [s for s in etoh_unrouted if s.phase == 'g']   # fermentation CO2 → BT gas slot
+etoh_solids = [F.unit.S401.outs[0]]                           # filter cake → BT slurry slot
+etoh_ww     = [s for s in etoh_unrouted                       # filtrate + pretreatment WW → WWT
+               if s not in etoh_gases and s is not F.unit.S401.outs[0]]
+```
+
+After `create_rcf_utilities_system()`, the streams are wired into the shared utilities:
+```python
+F.unit.M601.ins.extend(etoh_ww)
+solids_to_BT = bst.Mixer('MIX_BT_solids', ins=[WWT.outs[1]] + etoh_solids)
+BT.ins[0] = solids_to_BT.outs[0]
+gas_mixer.ins.extend(etoh_gases)
+```
+
+**Why `ethanol_system` is kept out of the combined system path:**
+
+Including `ethanol_system` in `path` triggers BioSTEAM's `update_configuration` when the ethanol system's utility specs (CWP, CT, PWC, CIP, ADP, FWT) adjust flows during simulation. `update_configuration` rebuilds all subsystem boundaries from a flat unit list and incorrectly pulls LLE200 (from `rcf_oil_purification_sys`) inside the ethanol system's boundary. The fix is `add_specification(simulate=True)`:
+
+```python
+rcf_combined_system = bst.System(
+    'Combined_RCF_System',
+    path=(rcf_system, rcf_oil_purification_sys, monomer_purification_sys, WWT),
+    facilities=[solids_to_BT, gas_mixer, BT],
+)
+
+@rcf_combined_system.add_specification(simulate=True)
+def update_ethanol():
+    ethanol_system.simulate()
+```
+
+`simulate=True` fires the spec before every combined-system pass, so `ethanol_system` re-converges on each `bst.Model` sample that changes `Carbohydrate_Pulp` flow. The ethanol streams are already wired into the shared utilities, so WWT and BT loads update automatically.
+
+**No ordering constraint:** Because `ethanol_production.py` never creates BT or WWT, the IDs `M601`, `WWTC`, `BT` etc. are never claimed by the ethanol system. `create_rcf_utilities_system()` can be called in any order relative to `create_cellulosic_ethanol_system`.
+
+**Full implementation pattern (as in `rcf_4_21_2026`):**
+
+```python
+from lignin_saf.ethanol_production import create_cellulosic_ethanol_system
+
+# 1. Create and simulate process subsystems
+rcf_system               = create_rcf_system(ins=poplar_in);  rcf_system.simulate()
 rcf_oil_purification_sys = create_rcf_oil_purification_system(ins=F.RCF_Oil)
 monomer_purification_sys = create_monomer_purification_system(ins=F.Purified_RCF_Oil)
 rcf_oil_purification_sys.simulate(); monomer_purification_sys.simulate()
 
-# 2. Ethanol system — BEFORE create_rcf_utilities_system()
-ethanol_system = cellulosic.create_cellulosic_ethanol_system(ins=F.Carbohydrate_Pulp)
+# 2. Ethanol system — BT and WWT absent (WWT=False, CHP=False in bst.create_all_facilities)
+ethanol_system = create_cellulosic_ethanol_system(ins=F.Carbohydrate_Pulp)
 ethanol_system.simulate()
 
-# 3. Save ethanol streams feeding its utilities, then disconnect them
-etoh_slurry_mixer = F.unit.slurry_mixer
-etoh_gas_mixer    = F.unit.gas_mixer
-etoh_M601         = F.unit.M601
-etoh_combustible_solids = [s for s in etoh_slurry_mixer.ins if s.source is not None]
-etoh_combustible_gases  = [s for s in etoh_gas_mixer.ins  if s.source is not None]
-etoh_ww_streams         = [s for s in etoh_M601.ins       if s.source is not None]
-etoh_slurry_mixer.ins.clear()   # prevent double-routing on re-simulate
-etoh_gas_mixer.ins.clear()
-etoh_M601.ins.clear()
+# 3. Identify unconnected outlets for shared utility routing
+etoh_product  = set(ethanol_system.outs)
+etoh_unrouted = [s for s in ethanol_system.streams
+                 if s.sink is None and s.source is not None
+                 and s not in etoh_product and s.F_mass > 0]
+etoh_gases  = [s for s in etoh_unrouted if s.phase == 'g']
+etoh_solids = [F.unit.S401.outs[0]]
+etoh_ww     = [s for s in etoh_unrouted
+               if s not in etoh_gases and s is not F.unit.S401.outs[0]]
 
-# 4. Remove ethanol system's BT and WWT from the flowsheet
-etoh_BT = next(u for u in ethanol_system.facilities
-               if isinstance(u, bst.facilities.BoilerTurbogenerator))
-F.remove_unit_and_associated_streams(etoh_slurry_mixer.ID)  # use actual ID, not alias
-F.remove_unit_and_associated_streams(etoh_gas_mixer.ID)
-F.remove_unit_and_associated_streams(etoh_BT.ID)
-for uid in ('M601', 'WWTC', 'R601', 'M602', 'R602',
-            'S601', 'S602', 'M603', 'S603', 'M604', 'S604'):
-    F.remove_unit_and_associated_streams(uid)
-
-# 5. Create RCF utilities — IDs are now free
+# 4. Create shared utilities and route ethanol streams
 BT, WWT, gas_mixer = create_rcf_utilities_system()
-
-# 6. Re-route ethanol streams into shared RCF utilities
-F.unit.M601.ins.extend(etoh_ww_streams)
-solids_to_BT = bst.Mixer('MIX_BT_solids', ins=[WWT.outs[1]] + etoh_combustible_solids)
+F.unit.M601.ins.extend(etoh_ww)
+solids_to_BT = bst.Mixer('MIX_BT_solids', ins=[WWT.outs[1]] + etoh_solids)
 BT.ins[0] = solids_to_BT.outs[0]
-gas_mixer.ins.extend(etoh_combustible_gases)
+gas_mixer.ins.extend(etoh_gases)
 
-# 7. Assemble unified combined system
+# 5. Assemble combined system — ethanol_system out of path, re-simulated via spec
 rcf_combined_system = bst.System(
     'Combined_RCF_System',
-    path=(rcf_system, rcf_oil_purification_sys, monomer_purification_sys,
-          ethanol_system, WWT),
+    path=(rcf_system, rcf_oil_purification_sys, monomer_purification_sys, WWT),
     facilities=[solids_to_BT, gas_mixer, BT],
 )
+
+@rcf_combined_system.add_specification(simulate=True)
+def update_ethanol():
+    ethanol_system.simulate()
+
 rcf_combined_system.simulate()
 ```
 
-**`F.remove_unit_and_associated_streams(ID)` API details:**
-- Method of the **flowsheet** (`F`), not a System or Unit.
-- Argument is a **string ID**, not a unit object or alias. For `slurry_mixer`/`gas_mixer` use `unit.ID` (the auto-assigned numeric ID) rather than the alias string.
-- Removes the unit from the registry and discards any inlet/outlet streams that have no source/sink respectively.
-- Does NOT remove the unit from `ethanol_system.facilities` or clear stream `._sink` attributes — those removed units re-run with empty inputs when the combined system re-simulates the ethanol system, which is harmless.
-
 **Notes:**
-- `Purge_Light_Gases` (PSA purge) is already in `gas_mixer.ins` because `create_rcf_utilities_system()` wires it there via `F.Purge_Light_Gases`.
-- The `strict_moisture_content=False` patch in `create_rcf_utilities_system()` is still applied to the shared RCF WWT.
+- `blowdown_recycle=True` in `ethanol_production.py`'s `bst.create_all_facilities` call routes CT blowdown to PWC (not WWT, since WWT=False).
 - `solids_to_BT` must appear before `BT` in the facilities list so its outlet is populated before BT consumes it.
+- The `strict_moisture_content=False` patch in `create_rcf_utilities_system()` applies to the shared WWT for both RCF and ethanol wastewater streams.
 
 ## TEA
 
@@ -620,9 +640,10 @@ Slots 0–5 are colorblind-friendly (Wong 2011). Add new entries at the end if m
 | `ligsaf_system.py` | `create_rcf_system(ins=None)` — Area 200 factory function |
 | `ligsaf_purification_system.py` | `create_rcf_oil_purification_system(ins=None)` — Area 300 EtOAc LLE factory function |
 | `monomer_purification.py` | `create_monomer_purification_system(ins=None)` — Area 300 hexane LLE monomer/dimer separation factory function |
+| `ethanol_production.py` | Local `create_cellulosic_ethanol_system` with `WWT=False, CHP=False`; creates the ethanol co-product system without its own BT or WWT so the shared RCF utilities serve the full biorefinery |
 | `ligsaf_utilities_system.py` | `create_rcf_utilities_system()` — Area 400 + 500; returns `(BT, WWT, gas_mixer)` |
 | `ligsaf_chemicals.py` | Chemical property definitions for the RCF system |
-| `ligsaf_plots.py` | Reusable figure-generation functions: `plot_installed_cost_breakdown` |
+| `ligsaf_plots.py` | Reusable figure-generation functions: `plot_installed_cost_breakdown`, `plot_operating_cost_breakdown` |
 | `cellulosic_tea.py` | `CellulosicEthanolTEA` class used for integrated system TEA |
 | `rcf_purification.py` | Entry-point script: builds and simulates the combined system (Areas 200–500) |
 | `rcf.py` | RCF-specific helper functions |
