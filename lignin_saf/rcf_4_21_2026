@@ -48,19 +48,12 @@ monomer_purification_sys.simulate()
 ethanol_system = create_cellulosic_ethanol_system(ins=F.Carbohydrate_Pulp)
 ethanol_system.simulate()
 
-# Identify streams from the ethanol system that need routing to the shared
-# BT and WWT. After simulation, these are the unconnected non-product outlets:
-#   etoh_gases  — fermentation CO2 and other gas-phase off-gases → BT gas slot
-#   etoh_solids — S401 filter cake (combustible slurry) → BT slurry slot
-#   etoh_ww     — liquid filtrate and pretreatment wastes → shared WWT
-etoh_product = set(ethanol_system.outs)
-etoh_unrouted = [s for s in ethanol_system.streams
-                 if s.sink is None and s.source is not None
-                 and s not in etoh_product and s.F_mass > 0]
-etoh_gases  = [s for s in etoh_unrouted if s.phase == 'g']
+# Explicit stream routing — verified against stock cellulosic.create_cellulosic_ethanol_system:
+#   fermentation vent (F.vent) is atmospheric — not burned in BT
+#   CT blowdown goes to PWC via blowdown_recycle=True — not to WWT
+#   cooling water and CT evaporation must not be captured
+etoh_ww     = [F.pretreatment_wastewater, F.unit.S401.outs[1]]
 etoh_solids = [F.unit.S401.outs[0]]
-etoh_ww     = [s for s in etoh_unrouted
-               if s not in etoh_gases and s is not F.unit.S401.outs[0]]
 
 # ── Area 400/500: Shared utilities ─────────────────────────────────────────
 BT, WWT, gas_mixer = create_rcf_utilities_system()
@@ -69,7 +62,12 @@ BT, WWT, gas_mixer = create_rcf_utilities_system()
 F.unit.M601.ins.extend(etoh_ww)
 solids_to_BT = bst.Mixer('MIX_BT_solids', ins=[WWT.outs[1]] + etoh_solids)
 BT.ins[0] = solids_to_BT.outs[0]
-gas_mixer.ins.extend(etoh_gases)
+# Fermentation vent is atmospheric — do NOT route to gas_mixer
+
+# Wire WWT RO-treated water to PWC; create_all_facilities(WWT=False) leaves M2
+# (placeholder mixer for WWT water) empty, so PWC would otherwise purchase
+# ~480,000 kg/hr of fresh water unnecessarily (~$1.1M/yr spurious cost).
+F.unit.PWC.ins[0] = WWT.outs[2]
 
 # ethanol_system is kept out of the combined path deliberately.
 # Including it triggers BioSTEAM's update_configuration, which rebuilds all
