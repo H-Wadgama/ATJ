@@ -68,7 +68,9 @@ def create_cellulosic_ethanol_system(ins, outs):
 
     # BT (CHP) and WWT are omitted — the shared RCF utilities in
     # ligsaf_utilities_system.py serve the entire integrated biorefinery.
-    # blowdown_recycle=True routes CT blowdown to PWC instead of WWT.
+    # blowdown_recycle=True matches the stock cellulosic factory behaviour:
+    # CT blowdown goes to PWC, not WWT. The stock system's WWT M601 only
+    # receives pretreatment_wastewater and S401.outs[1] (stillage filtrate).
     bst.create_all_facilities(
         feedstock,
         WWT=False,

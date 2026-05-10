@@ -373,7 +373,7 @@ The primary cause of the infeasibility is Acetate accumulation. `strict_moisture
 |---|---|---|---|
 | `WWT.outs[0]` | biogas | CH4 + CO2 from anaerobic digestion | `gas_mixer` → `BT.ins[1]` |
 | `WWT.outs[1]` | sludge | dewatered biological sludge from S603 | `BT.ins[0]` |
-| `WWT.outs[2]` | RO treated water | clean permeate from reverse osmosis | unconnected |
+| `WWT.outs[2]` | RO treated water | clean permeate from reverse osmosis | `PWC.ins[0]` — wire after WWT creation via `F.unit.PWC.ins[0] = WWT.outs[2]` |
 | `WWT.outs[3]` | brine | RO reject | unconnected |
 
 **BT combustion reactions — current status:**
@@ -403,26 +403,53 @@ BioSTEAM's BT auto-derives combustion reactions from a chemical's elemental form
 
 **Stream routing — how ethanol streams reach the shared utilities:**
 
-After `ethanol_system.simulate()`, streams that would normally have gone to the ethanol BT/WWT are unconnected outlets. They are identified by inspecting the flowsheet for non-product sinks-free streams:
+Streams are identified by explicit name, not by a `sink is None` heuristic. The heuristic was found to over-capture cooling tower evaporation (atmospheric), cooling water circulation streams, and the fermentation vent — none of which should be routed to BT or WWT. Verified by running `solo_ethanol_no_facilities.py` against `solo_ethanol.py` (stock factory) and comparing stream-by-stream.
+
+Correct routing (matches `cellulosic.create_cellulosic_ethanol_system`):
+
+| Stream | Destination | Notes |
+|---|---|---|
+| `F.pretreatment_wastewater` | WWT via `M601.ins` | Named stream from dilute-acid pretreatment |
+| `F.unit.S401.outs[1]` (stillage filtrate, ID `s48`) | WWT via `M601.ins` | Liquid fraction from pressure filter |
+| `F.unit.S401.outs[0]` (filter cake, ID `s47`) | BT solids slot via `solids_to_BT` | |
+| `WWT.outs[0]` (biogas) | BT gas slot via `gas_mixer` | Already in `gas_mixer` from `create_rcf_utilities_system()` |
+| `WWT.outs[1]` (sludge) | BT solids slot via `solids_to_BT` | |
+| `WWT.outs[2]` (RO treated water, ~479,000 kg/hr) | `PWC.ins[0]` directly | See PWC note below |
+| Fermentation vent (`F.vent`) | **unconnected** — atmospheric | Stock system does not burn it in BT |
+| CT evaporation | **unconnected** — atmospheric | |
+| CT blowdown | → PWC via `blowdown_recycle=True` in `ethanol_production.py` | Not routed to WWT |
 
 ```python
-etoh_product  = set(ethanol_system.outs)
-etoh_unrouted = [s for s in ethanol_system.streams
-                 if s.sink is None and s.source is not None
-                 and s not in etoh_product and s.F_mass > 0]
-etoh_gases  = [s for s in etoh_unrouted if s.phase == 'g']   # fermentation CO2 → BT gas slot
-etoh_solids = [F.unit.S401.outs[0]]                           # filter cake → BT slurry slot
-etoh_ww     = [s for s in etoh_unrouted                       # filtrate + pretreatment WW → WWT
-               if s not in etoh_gases and s is not F.unit.S401.outs[0]]
+# Explicit stream routing — do NOT use sink=None heuristic
+etoh_ww     = [F.pretreatment_wastewater, F.unit.S401.outs[1]]
+etoh_solids = [F.unit.S401.outs[0]]
 ```
 
-After `create_rcf_utilities_system()`, the streams are wired into the shared utilities:
+After `create_rcf_utilities_system()`, wire into shared utilities:
 ```python
 F.unit.M601.ins.extend(etoh_ww)
 solids_to_BT = bst.Mixer('MIX_BT_solids', ins=[WWT.outs[1]] + etoh_solids)
 BT.ins[0] = solids_to_BT.outs[0]
-gas_mixer.ins.extend(etoh_gases)
+# Do NOT extend gas_mixer with etoh_gases — fermentation vent is atmospheric
 ```
+
+**PWC ← WWT.outs[2] connection (critical):**
+
+`create_all_facilities(WWT=False)` creates an empty placeholder mixer M2 that was intended to receive WWT treated water. Since WWT=False, M2 has no inlets and its outlet flows 0 kg/hr. Without wiring `WWT.outs[2]` to `PWC.ins[0]`, PWC must purchase ~480,000 kg/hr of fresh water that the stock system gets for free from WWT — adding ~$143/hr (~$1.1M/yr at 7,920 hr/yr) of spurious PWC cost.
+
+In the stock `cellulosic.create_cellulosic_ethanol_system`, M4 (a single-inlet pass-through mixer from S604) feeds this stream to `PWC.ins[0]` automatically. The equivalent fix is to bypass M2 and connect directly:
+
+```python
+# Wire WWT RO-treated water to PWC — bypasses M2 (empty placeholder)
+# Verified: M4 in the stock system has exactly one inlet (RO_treated_water from S604);
+# our direct connection is structurally equivalent.
+# The WWT→PWC feedback is weak; no explicit recycle specification is needed.
+F.unit.PWC.ins[0] = WWT.outs[2]
+```
+
+**`fuel_price` and `utility_cost`:**
+
+`BT.utility_cost` does not include natural gas cost — BioSTEAM treats natural gas as a raw material billed through the TEA's `material_cost` (via `BT.ins[2].price`), not through `utility_cost`. The `fuel_price` parameter therefore does not appear in `utility_cost` comparisons, but it will affect `tea.solve_price()`. The RCF system uses `fuel_price=0.2612`; the stock cellulosic factory uses `fuel_price=0.218`.
 
 **Why `ethanol_system` is kept out of the combined system path:**
 
@@ -444,7 +471,7 @@ def update_ethanol():
 
 **No ordering constraint:** Because `ethanol_production.py` never creates BT or WWT, the IDs `M601`, `WWTC`, `BT` etc. are never claimed by the ethanol system. `create_rcf_utilities_system()` can be called in any order relative to `create_cellulosic_ethanol_system`.
 
-**Full implementation pattern (as in `rcf_4_21_2026`):**
+**Full implementation pattern (target for `rcf_4_21_2026` update):**
 
 ```python
 from lignin_saf.ethanol_production import create_cellulosic_ethanol_system
@@ -459,22 +486,25 @@ rcf_oil_purification_sys.simulate(); monomer_purification_sys.simulate()
 ethanol_system = create_cellulosic_ethanol_system(ins=F.Carbohydrate_Pulp)
 ethanol_system.simulate()
 
-# 3. Identify unconnected outlets for shared utility routing
-etoh_product  = set(ethanol_system.outs)
-etoh_unrouted = [s for s in ethanol_system.streams
-                 if s.sink is None and s.source is not None
-                 and s not in etoh_product and s.F_mass > 0]
-etoh_gases  = [s for s in etoh_unrouted if s.phase == 'g']
+# 3. Name ethanol streams explicitly — do NOT use sink=None heuristic.
+# Verified against stock cellulosic.create_cellulosic_ethanol_system:
+# - Fermentation vent is atmospheric (not burned in BT)
+# - CT blowdown goes to PWC via blowdown_recycle=True (not to WWT)
+# - Cooling tower evaporation and cooling water streams must not be captured
+etoh_ww     = [F.pretreatment_wastewater, F.unit.S401.outs[1]]
 etoh_solids = [F.unit.S401.outs[0]]
-etoh_ww     = [s for s in etoh_unrouted
-               if s not in etoh_gases and s is not F.unit.S401.outs[0]]
 
 # 4. Create shared utilities and route ethanol streams
 BT, WWT, gas_mixer = create_rcf_utilities_system()
 F.unit.M601.ins.extend(etoh_ww)
 solids_to_BT = bst.Mixer('MIX_BT_solids', ins=[WWT.outs[1]] + etoh_solids)
 BT.ins[0] = solids_to_BT.outs[0]
-gas_mixer.ins.extend(etoh_gases)
+# Do NOT extend gas_mixer with ethanol gases — fermentation vent is atmospheric
+
+# Wire WWT RO-treated water back to PWC.
+# create_all_facilities(WWT=False) leaves M2 (placeholder mixer for WWT water) empty.
+# Without this line PWC purchases ~480,000 kg/hr of fresh water unnecessarily (~$1.1M/yr).
+F.unit.PWC.ins[0] = WWT.outs[2]
 
 # 5. Assemble combined system — ethanol_system out of path, re-simulated via spec
 rcf_combined_system = bst.System(
@@ -491,9 +521,10 @@ rcf_combined_system.simulate()
 ```
 
 **Notes:**
-- `blowdown_recycle=True` in `ethanol_production.py`'s `bst.create_all_facilities` call routes CT blowdown to PWC (not WWT, since WWT=False).
+- `blowdown_recycle=True` in `ethanol_production.py` matches the stock factory: CT blowdown goes to PWC, not WWT. Setting it to `False` would leave CT blowdown with no sink and does not match the stock system's WWT loading.
 - `solids_to_BT` must appear before `BT` in the facilities list so its outlet is populated before BT consumes it.
 - The `strict_moisture_content=False` patch in `create_rcf_utilities_system()` applies to the shared WWT for both RCF and ethanol wastewater streams.
+- **`rcf_4_21_2026` still uses the old heuristic and `gas_mixer.ins.extend(etoh_gases)` — these need updating to match this pattern before the next TEA run.**
 
 ## TEA
 
