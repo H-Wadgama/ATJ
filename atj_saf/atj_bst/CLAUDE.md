@@ -10,7 +10,7 @@ Three-step catalytic conversion of bioethanol to sustainable aviation fuel (SAF)
 Bioethanol → [Dehydration, R201] → Ethylene → [Oligomerization, R202] → C4–C18 Olefins → [Hydrogenation, R203] → SAF + RN + RD
 ```
 
-**Design basis (standalone mode only):** `calculate_ethanol_flow()` provides an approximate ethanol feed for a target SAF output; used only when `ins=None`. When integrated with the cellulosic ethanol system (2,000 DMT/day poplar), `ins=F.Ethanol_Out` is passed and the feed flow is entirely determined upstream — `req_saf` is ignored.  
+**Design basis (standalone mode only):** `calculate_ethanol_flow()` provides an approximate ethanol feed for a target SAF output; used only when `ins=None`. When integrated with the cellulosic ethanol system (2,000 DMT/day poplar), `ins=F.ethanol` is passed and the feed flow is entirely determined upstream — `req_saf` is ignored.  
 **CEPCI basis:** 800.8 (2023 USD).
 
 ```python
@@ -217,7 +217,7 @@ PSA (S203) recovers 85 mol% of the H₂ from the post-hydrogenation gas as `h2_r
 
 ## Ethanol Flow Utility (`etj_utils.py`)
 
-Used only in standalone mode (`ins=None`). When integrated with the cellulosic ethanol system, `ins=F.Ethanol_Out` is passed and this function is never called — ethanol flow is set by the upstream system.
+Used only in standalone mode (`ins=None`). When integrated with the cellulosic ethanol system, `ins=F.ethanol` is passed and this function is never called — ethanol flow is set by the upstream system.
 
 ```python
 etoh_flow = calculate_ethanol_flow(req_saf=9, operating_factor=0.9)
@@ -267,11 +267,24 @@ python -m atj_saf.atj_bst.etj_run
 ```python
 from atj_saf.atj_bst.etj_no_facilities import create_etj_system_no_facilities
 
-# Thermo must already be set by the calling script before this is called.
 # Pass the ethanol stream produced upstream; req_saf is ignored when ins is provided.
-etj_sys = create_etj_system_no_facilities(ins=F.Ethanol_Out)
+etj_sys = create_etj_system_no_facilities(ins=F.ethanol)
 ```
-`create_etj_system_no_facilities` still calls `create_chemicals()` and `bst.settings.set_thermo()` internally — reconcile with the shared thermo of the combined system (analogous to the `WWT=False, CHP=False` pattern in `ethanol_production.py`). WWT and BT are absent; the WW outlet of H602 (`WW_cooler.outs[0]`) should be wired into the combined system's central WWT mixer after the ETJ system is created.
+WWT and BT are absent; the WW outlet of H602 (`WW_cooler.outs[0]`) should be wired into the combined system's central WWT mixer after the ETJ system is created.
+
+**OPEN BLOCKING ISSUE — thermo and flowsheet conflict with RCF integration:**
+
+`create_etj_system_no_facilities` currently contains two lines that are incompatible with being called inside an RCF+ETJ combined script:
+
+```python
+bst.F.set_flowsheet('etj')          # line 11 — switches active flowsheet away from main
+bst.settings.set_thermo(etj_chems)  # line 18 — overwrites RCF thermo with ETJ-only chemicals
+bst.settings.CEPCI = 800.8          # line 20 — overwrites CEPCI set by the RCF script
+```
+
+The RCF system uses `ligsaf_chemicals` (cellulosic + RCF lignin chemicals, CEPCI=541.7). Calling `create_etj_system_no_facilities` after setting up the RCF system would silently discard the RCF thermo and switch to ETJ-only chemicals, breaking all RCF unit operations.
+
+**Required fix before RCF+ETJ integration is possible:** Create a merged chemical set containing all chemicals from both `ligsaf_chemicals.create_chemicals()` and `etj_chemicals.create_chemicals()`, set it as the global thermo once at the top of `rcf_with_etj.py`, then remove (or guard with `if ins is None`) the three lines above from `create_etj_system_no_facilities`. The CEPCI mismatch (541.7 vs 800.8) also needs a deliberate decision — either choose one basis or escalate all costs to a common year before combining TEA results.
 
 TEA setup (after simulation):
 ```python

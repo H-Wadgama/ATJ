@@ -662,10 +662,12 @@ Slots 0–5 are colorblind-friendly (Wong 2011). Add new entries at the end if m
 | `ligsaf_system.py` | `create_rcf_system(ins=None)` — Area 200 factory function |
 | `ligsaf_purification_system.py` | `create_rcf_oil_purification_system(ins=None)` — Area 300 EtOAc LLE factory function |
 | `monomer_purification.py` | `create_monomer_purification_system(ins=None)` — Area 300 hexane LLE monomer/dimer separation factory function |
-| `ethanol_production.py` | Local `create_cellulosic_ethanol_system` with `WWT=False, CHP=False`; creates the ethanol co-product system without its own BT or WWT so the shared RCF utilities serve the full biorefinery |
+| `ethanol_production.py` | Local `create_cellulosic_ethanol_system` with `WWT=False, CHP=False`; creates the ethanol co-product system without its own BT or WWT so the shared RCF utilities serve the full biorefinery. Output stream is named `ethanol`. |
+| `ethanol_production_no_denaturant.py` | Variant of `ethanol_production.py` for use when the ethanol product is fed to catalytic upgrading (e.g. ETJ) rather than sold as fuel-grade ethanol. Sets `udct['M701'].denaturant_fraction = 0.0` so the `adjust_denaturant` spec resolves to zero octane on every iteration. All other unit operations, stream routing, and facility handling identical to `ethanol_production.py`. Use this instead of `ethanol_production.py` in `rcf_with_etj.py`. |
 | `ligsaf_utilities_system.py` | `create_rcf_utilities_system()` — Area 400 + 500; returns `(BT, WWT, gas_mixer)` |
 | `ligsaf_chemicals.py` | Chemical property definitions for the RCF system |
 | `ligsaf_plots.py` | Reusable figure-generation functions: `plot_installed_cost_breakdown`, `plot_operating_cost_breakdown` |
 | `cellulosic_tea.py` | `CellulosicEthanolTEA` class used for integrated system TEA |
 | `rcf_purification.py` | Entry-point script: builds and simulates the combined system (Areas 200–500) |
+| `rcf_with_etj.py` | Entry-point script for the RCF + ETJ integrated biorefinery. Currently implements the RCF + cellulosic ethanol + shared utilities assembly (identical to `rcf_4_21_2026` but using `ethanol_production_no_denaturant`); ETJ catalytic upgrading step not yet wired in. |
 | `rcf.py` | RCF-specific helper functions |
