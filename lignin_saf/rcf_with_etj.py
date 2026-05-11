@@ -6,7 +6,7 @@ from lignin_saf.ligsaf_system import create_rcf_system
 from lignin_saf.ligsaf_purification_system import create_rcf_oil_purification_system
 from lignin_saf.monomer_purification import create_monomer_purification_system
 from lignin_saf.ligsaf_utilities_system import create_rcf_utilities_system
-from lignin_saf.ethanol_production_no_denaturant import create_cellulosic_ethanol_system
+from lignin_saf.ethanol_production import create_cellulosic_ethanol_system
 from cellulosic_tea import create_cellulosic_ethanol_tea
 from atj_saf.atj_bst.etj_no_facilities import create_etj_system_no_facilities
 
@@ -48,7 +48,7 @@ monomer_purification_sys.simulate()
 # create_cellulosic_ethanol_system omits BT (CHP) and WWT via WWT=False,
 # CHP=False in its create_all_facilities call, so no ID conflicts arise
 # with the shared RCF utilities created below.
-ethanol_system = create_cellulosic_ethanol_system(ins=F.Carbohydrate_Pulp)
+ethanol_system = create_cellulosic_ethanol_system(ins=F.Carbohydrate_Pulp, add_denaturant=False)
 ethanol_system.simulate()
 
 # Explicit stream routing — verified against stock cellulosic.create_cellulosic_ethanol_system:

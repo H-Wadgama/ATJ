@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-.. autofunction:: biorefineries.cellulosic.systems.cellulosic_ethanol.create_cellulosic_ethanol_system
+Cellulosic ethanol factory for use in the RCF integrated biorefinery.
 
+Pass ``add_denaturant=False`` when the ethanol product is routed to
+catalytic upgrading (e.g. ETJ) rather than sold as fuel-grade ethanol.
+``create_all_facilities`` always omits BT and WWT so the shared RCF
+utilities serve the full biorefinery.
 """
 
 import biosteam as bst
@@ -21,7 +25,7 @@ __all__ = ('create_cellulosic_ethanol_system',)
           s.denaturant],
     outs=[s.ethanol],
 )
-def create_cellulosic_ethanol_system(ins, outs):
+def create_cellulosic_ethanol_system(ins, outs, add_denaturant=True):
     feedstock, sulfuric_acid, ammonia, denaturant = ins
     ethanol, = outs
     U101 = units.FeedStockHandling('U101', feedstock)
@@ -59,6 +63,8 @@ def create_cellulosic_ethanol_system(ins, outs):
     udct['H401'].dT = 10
     udct['D402'].k = 1.4
     udct['D403'].k = 1.4
+    if not add_denaturant:
+        udct['M701'].denaturant_fraction = 0.0
     ethanol, stillage, recycle_process_water = ethanol_purification_sys.outs
     recycled_water = tmo.Stream(Water=1,
                                 T=47+273.15,
