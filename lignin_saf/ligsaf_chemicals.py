@@ -14,9 +14,31 @@ def create_chemicals():
     methane = tmo.Chemical('Methane')
     hexane = tmo.Chemical('Hexane')
     ethyl_acetate = tmo.Chemical('EthylAcetate')
+    ethylene = tmo.Chemical('Ethylene')
+    butene = tmo.Chemical('Butene')          # Butene and hexene are representative surrogates for renewable naphtha
+    hexene = tmo.Chemical('Hex-1-ene')  
+    decene = tmo.Chemical('Dec-1-ene')       # Decene is representative for SAF
+    octene = tmo.Chemical('Octadec-1-ene')   # Octadecene is representative for renewable diesel
+    butane = tmo.Chemical('Butane')
+    octane = tmo.Chemical('Octane')
+    decane = tmo.Chemical('Decane')
+    octadecane = tmo.Chemical('Octadecane')  
+
     activated_carbon = tmo.Chemical('ActivatedCarbon', search_db=False, default=True, phase='s')
     NiC = tmo.Chemical('NiC', search_db=False, default = True, phase = 's')
+    syndol = tmo.Chemical('Syndol', search_db = False, default = True, phase = 's')
+    ni_sial = tmo.Chemical('Nickel_SiAl', search_db = False, default = True, phase = 's')
+    co_mo = tmo.Chemical('CobaltMolybdenum', search_db = False, default = True, phase = 's')
+    coal = tmo.Chemical('Coal', search_db = False, default = True, phase = 's')
+    syndol.synonyms = ('Dehydration-Catalyst',) 
+    ni_sial.synonyms = ('Oligomerization_Catalyst')
+    co_mo.synonyms = ('Hydrogenation_Catalyst')
     
+
+
+
+
+
     # Custom chemical properties estimated using NIST ThermoDataEngine (TDE) from Aspen Plus V14
     # Only propylguaiacol was native to Aspen, every other component was user defined
     # All six of these user defined components are the same as chosen by Bartling et al Fig S8
@@ -107,7 +129,8 @@ def create_chemicals():
 
 
     # 4) Extend the base collection
-    ligsaf_chems.extend([methanol, hydrogen, methane, hexane, ethyl_acetate, NiC, activated_carbon, propylguaiacol, propylsyringol,syringaresinol,g_dimer,
+    ligsaf_chems.extend([methanol, hydrogen, methane, hexane, ethyl_acetate, ethylene, butene, hexene, decene, octene, butane, octane, decane, octadecane,
+                         syndol, ni_sial, co_mo, coal, NiC, activated_carbon, propylguaiacol, propylsyringol,syringaresinol,g_dimer,
                   s_oligomer, g_oligomer])
 
     ligsaf_chems.compile()  # Compiling all the chemicals to one string

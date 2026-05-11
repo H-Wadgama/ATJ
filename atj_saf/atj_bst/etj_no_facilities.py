@@ -174,7 +174,7 @@ def create_etj_system_no_facilities(ins=None):
 
     flash_2 = bst.Flash('T202', ins = cooler_5-0, T = 250, P = 5e5)
 
-    psa_splitter = bst.Splitter('S203', ins = flash_2-0, outs = (h2_recycle,'BT_feed'),  split = {'Hydrogen':h2_recovery})
+    psa_splitter = bst.Splitter('S203', ins = flash_2-0, outs = (h2_recycle,'etj_waste_gases'),  split = {'Hydrogen':h2_recovery})
 
 
     # Area 300: Product Fractionation
