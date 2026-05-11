@@ -11,7 +11,6 @@ from atj_saf.atj_bst.atj_bst_units import AdiabaticReactor, IsothermalReactor, E
 bst.F.set_flowsheet('etj') # F is the main flowsheet
 etj_chems = create_chemicals()
 bst.settings.set_thermo(etj_chems)
-bst.settings.CEPCI = 800.8 # For the year 2023 from https://personalpages.manchester.ac.uk/staff/tom.rodgers/Interactive_graphs/CEPCI.html?reactors/CEPCI/index.html
 
 def create_etj_system_no_facilities(ins=None):
 
@@ -69,14 +68,14 @@ def create_etj_system_no_facilities(ins=None):
 
 
     # Area 100: Feed Storage
-    etoh_storage = EthanolStorageTank('T101', ins = etoh_in)
+    #etoh_storage = EthanolStorageTank('T101', ins = etoh_in)
 
     h2_in = bst.Stream(ID = 'Hydrogen_In', P = 3e6, phase = 'g')
     h2_storage = HydrogenStorageTank('T102', ins = h2_in)
 
 
     # Area 200: Catalytic Upgrading
-    pump_1 = bst.Pump('P201', ins = etoh_storage.outs[0], P = 1373000)
+    pump_1 = bst.Pump('P201', ins = etoh_in, P = 1373000)
 
     furnace_1 = bst.HXutility('H201', ins = pump_1.outs[0], T = 500, rigorous = True)
 
@@ -220,13 +219,13 @@ def create_etj_system_no_facilities(ins=None):
 
 
     # Area 600: Wastewater collection (no WWT facility — routed to central utilities in combined system)
-    WW_mixer = bst.Mixer('M601', ins = (flash_1-1, distillation_1-1, distillation_2-1), rigorous = True)
+    WW_mixer = bst.Mixer('ETJ_WW_MIX', ins = (flash_1-1, distillation_1-1, distillation_2-1), rigorous = True)
     WW_cooler = bst.HXutility('H602', ins = WW_mixer.outs[0], V = 0, rigorous = True)
 
     catalyst_replacement_unit = CatalystMixer(ins = (syndol_replacement, ni_si_al_replacement, co_mo_replacement))
 
 
-    etj_sys = bst.System('atj_sys', path = (etoh_storage, pump_1, furnace_1, mixer_1, furnace_2, dehyd_1, splitter_1, flash_1, comp_1,
+    etj_sys = bst.System('atj_sys', path = (pump_1, furnace_1, mixer_1, furnace_2, dehyd_1, splitter_1, flash_1, comp_1,
                                             distillation_1, comp_2, distillation_2, cooler_3, mixer_2,
                                             olig_1, splitter_2, h2_storage, mixer_4, furnace_3, hydgn_1, cooler_5,
                                             flash_2, psa_splitter, distillation_3, distillation_4, cooler_6, cooler_7, cooler_8,

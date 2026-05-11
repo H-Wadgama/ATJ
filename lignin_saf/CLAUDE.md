@@ -517,6 +517,99 @@ rcf_combined_system.simulate()
 - `solids_to_BT` must appear before `BT` in the facilities list so its outlet is populated before BT consumes it.
 - The `strict_moisture_content=False` patch in `create_rcf_utilities_system()` applies to the shared WWT for both RCF and ethanol wastewater streams.
 
+## RCF + ETJ Integrated Biorefinery (`rcf_with_etj.py`)
+
+Extends the RCF + cellulosic ethanol assembly (described above) by routing the cellulosic ethanol product through the ETJ catalytic upgrading system rather than selling it. Products: RCF lignin monomers (MSP target), renewable naphtha (RN, C4–C6), sustainable aviation fuel (SAF, C10), and renewable diesel (RD, C18).
+
+### Chemical set
+
+`ligsaf_chemicals.create_chemicals()` is a strict superset of `etj_chemicals.create_chemicals()` — every ETJ-specific chemical (Ethylene, Butene, Hex-1-ene, Dec-1-ene, Octadec-1-ene, Butane, Hexane, Decane, Octadecane, Syndol, Nickel_SiAl, CobaltMolybdenum, Coal) is already present in the ligsaf chemical set. No separate merged chemical set is needed. `rcf_with_etj.py` calls `bst.settings.set_thermo(ligsaf_chems)` once and it serves both subsystems.
+
+### Module-level side effects in `etj_no_facilities.py`
+
+Importing `create_etj_system_no_facilities` immediately runs two module-level statements:
+```python
+bst.F.set_flowsheet('etj')          # switches active flowsheet to 'etj'
+bst.settings.set_thermo(etj_chems)  # sets ETJ-only chemicals — overridden on the next line of rcf_with_etj.py
+```
+`rcf_with_etj.py` calls `bst.settings.set_thermo(ligsaf_chems)` right after the import, overriding the ETJ-only thermo with the complete ligsaf set. The `CEPCI = 800.8` line has been removed from `etj_no_facilities.py`; the combined system uses `CEPCI = 541.7` throughout.
+
+The `set_flowsheet('etj')` line is still present but not blocking. Because it runs before any units are created in `rcf_with_etj.py`, all RCF, ethanol, and ETJ units are consistently registered in the 'etj' flowsheet. `F` (from `from biosteam import main_flowsheet as F`) aliases this flowsheet, so all `F.xxx` stream and unit lookups work correctly.
+
+### Ethanol feed routing to ETJ
+
+The cellulosic ethanol product exits `T703` (the "Product tank", explicitly named in `ethanol_production_no_denaturant.py`). An NH3 splitter guards against trace ammonia before the ETJ feed:
+```python
+nh3_splitter = bst.units.Splitter(ins=F.T703.outs[0], split={'NH3': 1.0})
+# outs[1] = ethanol product (NH3-free) → ETJ feed
+etj_system = create_etj_system_no_facilities(ins=nh3_splitter.outs[1])
+```
+With `denaturant_fraction=0.0`, T703 outputs ~99.5 wt% ethanol and no octane. NH3 in practice exits with the beer column stillage, not T703, so the splitter is effectively a pass-through. It is retained as an explicit guard.
+
+### ETJ wastewater routing
+
+The ETJ system collects its aqueous streams (T201 bottoms, D201 bottoms, D202 bottoms) in `ETJ_WW_MIX`, cools them in `H602`, then routes the H602 outlet to the shared WWT:
+```python
+etoh_ww.append(F.H602.outs[0])          # add ETJ WW alongside ethanol WW streams
+# ... after create_rcf_utilities_system():
+F.unit.M601.ins.extend(etoh_ww)          # M601 is the WWT inlet mixer
+```
+The ETJ WW mixer was renamed from `M601` to `ETJ_WW_MIX` in `etj_no_facilities.py` to eliminate the ID conflict with the WWT's internal `M601`.
+
+### ETJ waste gases routing
+
+The ETJ PSA reject (`etj_waste_gases`, from S203) must be appended to the shared `gas_mixer`, not assigned to `BT.ins[1]`:
+```python
+gas_mixer.ins.append(F.etj_waste_gases)
+# gas_mixer already holds: F.Purge_Light_Gases (RCF PSA purge) + WWT.outs[0] (biogas)
+# BT.ins[1] remains = gas_mixer.outs[0] — do NOT overwrite it
+```
+Writing `BT.ins[1] = F.etj_waste_gases` would replace the gas_mixer connection, disconnecting RCF PSA purge gas and WWT biogas from BT.
+
+### Combined system path
+
+```python
+rcf_combined_system = bst.System(
+    'Combined_RCF_System',
+    path=(rcf_system, rcf_oil_purification_sys, monomer_purification_sys,
+          ethanol_system, nh3_splitter, etj_system, WWT),
+    facilities=[solids_to_BT, gas_mixer, BT],
+)
+```
+
+**Critical ordering:** `nh3_splitter` and `etj_system` must precede `WWT`. The ETJ WW (`F.H602.outs[0]`) is added to `M601.ins`, and the combined system has no outer recycle declared between the ETJ and WWT subsystems. If WWT runs before ETJ, it processes zero ETJ WW on that pass. Placing ETJ before WWT ensures H602 is populated when WWT executes.
+
+**Solids to BT:** The ETJ system produces no combustible solids. Only WWT sludge and ethanol filter cake feed `solids_to_BT`:
+```python
+solids_to_BT = bst.Mixer('MIX_BT_solids', ins=[WWT.outs[1]] + etoh_solids)
+BT.ins[0] = solids_to_BT.outs[0]
+```
+
+### CEPCI basis
+
+The combined system uses `CEPCI = 541.7` (2016 USD) throughout. The ETJ unit cost parameters in `atj_bst_units.py` reference 2009–2015 literature (Amos 1999 NREL for H₂ storage, Mueller 2009 for ethanol tanks, Dutta 2015 PNNL for product tanks). At CEPCI=541.7, ETJ installed costs are evaluated on the same basis as the RCF and ethanol systems. Note: ETJ standalone results reported at CEPCI=800.8 (2023 USD) are approximately 48% higher — this gap should be acknowledged when comparing standalone vs. integrated ETJ capital costs.
+
+### Open TEA items
+
+The following ETJ streams require prices in `rcf_with_etj.py` **before calling `integrated_tea.solve_price()`**:
+
+| Stream | Price to set | Value | Notes |
+|---|---|---|---|
+| `F.Hydrogen_In` | `price_data['hydrogen']` | 8.46 USD/kg | PEM H₂ — largest ETJ operating cost; omitting it understates VOC significantly |
+| `F.RN` | `price_data['renewable_naphtha']` | 0.71 USD/kg | Co-product revenue; omitting it inflates the RCF monomer MSP |
+| `F.RD` | `price_data['renewable_diesel']` | 1.888 USD/kg | Co-product revenue; same issue |
+| `F.SAF` | market price (USD/kg) | no entry in `price_data` | Set to a literature market price when solving for RCF monomer MSP; leave at 0 and set `F.RCF_Monomers.price` if solving for SAF MJSP instead |
+
+```python
+from atj_saf.atj_bst.etj_settings import price_data
+F.Hydrogen_In.price = price_data['hydrogen']           # 8.46 USD/kg
+F.RN.price          = price_data['renewable_naphtha']  # 0.71 USD/kg
+F.RD.price          = price_data['renewable_diesel']   # 1.888 USD/kg
+F.SAF.price         = <market_price_USD_per_kg>        # no entry in etj_settings.py; choose from literature
+```
+
+Without these prices, the TEA computes zero H₂ cost and zero SAF/RN/RD revenue, making the `solve_price(F.RCF_Monomers)` result meaningless.
+
 ## TEA
 
 `rcf_4_21_2026` runs a full TEA using `CellulosicEthanolTEA` from `cellulosic_tea.py` (NREL 2011 methodology, 2016 USD, 10% IRR, 30-year plant life, MACRS7 depreciation for process equipment, MACRS20 for BT).
@@ -669,5 +762,5 @@ Slots 0–5 are colorblind-friendly (Wong 2011). Add new entries at the end if m
 | `ligsaf_plots.py` | Reusable figure-generation functions: `plot_installed_cost_breakdown`, `plot_operating_cost_breakdown` |
 | `cellulosic_tea.py` | `CellulosicEthanolTEA` class used for integrated system TEA |
 | `rcf_purification.py` | Entry-point script: builds and simulates the combined system (Areas 200–500) |
-| `rcf_with_etj.py` | Entry-point script for the RCF + ETJ integrated biorefinery. Currently implements the RCF + cellulosic ethanol + shared utilities assembly (identical to `rcf_4_21_2026` but using `ethanol_production_no_denaturant`); ETJ catalytic upgrading step not yet wired in. |
+| `rcf_with_etj.py` | Entry-point script for the fully integrated RCF + cellulosic ethanol + ETJ biorefinery. Poplar → RCF lignin monomers co-produced with SAF/RN/RD from ETJ upgrading of cellulosic ethanol. Uses `ethanol_production_no_denaturant` (denaturant=0) so all ethanol routes to ETJ. Shared utilities (BT, WWT) serve all three areas. See "RCF + ETJ Integrated Biorefinery" section for integration details and open TEA items. |
 | `rcf.py` | RCF-specific helper functions |

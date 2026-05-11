@@ -57,20 +57,33 @@ etoh_ww     = [F.pretreatment_wastewater, F.unit.S401.outs[1]]
 etoh_solids = [F.unit.S401.outs[0]]
 
 
+
+nh3_splitter = bst.units.Splitter(ins = F.T703.outs[0], split = {'NH3':1.0} )
+nh3_splitter.simulate()
+
 # Ethanol to Jet
-etj_system = create_etj_system_no_facilities(ins = F.ethanol)
+etj_system = create_etj_system_no_facilities(ins = nh3_splitter.outs[1])
+etj_system.simulate()
+
+etoh_ww.append(F.H602.outs[0])
+
+
+
+
+
+
 
 # ── Area 400/500: Shared utilities ─────────────────────────────────────────
 BT, WWT, gas_mixer = create_rcf_utilities_system()
-
+gas_mixer.ins.append(F.etj_waste_gases)
 # Route ethanol streams into the shared RCF utilities.
-F.unit.M601.ins.extend(etoh_ww, F.WW_cooler.outs[0])
+F.unit.M601.ins.extend(etoh_ww)
+
 solids_to_BT = bst.Mixer('MIX_BT_solids', ins=[WWT.outs[1]] + etoh_solids)
 BT.ins[0] = solids_to_BT.outs[0]
 # Fermentation vent is atmospheric — do NOT route to gas_mixer
 
 
-BT.ins[1] = F.etj_waste_gases
 
 
 # Wire WWT RO-treated water to PWC; create_all_facilities(WWT=False) leaves M2
@@ -80,7 +93,7 @@ F.unit.PWC.ins[0] = WWT.outs[2]
 
 rcf_combined_system = bst.System(
     'Combined_RCF_System',
-    path=(rcf_system, rcf_oil_purification_sys, monomer_purification_sys, ethanol_system, WWT),
+    path=(rcf_system, rcf_oil_purification_sys, monomer_purification_sys, ethanol_system, nh3_splitter, etj_system, WWT),
     facilities=[solids_to_BT, gas_mixer, BT],
 )
 

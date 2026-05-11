@@ -106,7 +106,7 @@ etj_sys = bst.System('atj_sys',
 
 | Variable Name | Type | Function |
 |---|---|---|
-| `WW_mixer` (M601) | Mixer | Combine aqueous streams from T201, D201, D202 |
+| `WW_mixer` (ETJ_WW_MIX) | Mixer | Combine aqueous streams from T201, D201, D202 |
 | `WW_cooler` (H602) | HXutility | Cool combined WW to liquid (V=0, rigorous) |
 | `WWT` | `bst.create_conventional_wastewater_treatment_system` | Humbird 2011 WWT |
 
@@ -233,7 +233,7 @@ etoh_flow = calculate_ethanol_flow(req_saf=9, operating_factor=0.9)
 | File | Contents |
 |---|---|
 | `etj_system.py` | `create_etj_system(ins=None, req_saf=9)` — full factory function; returns ready-to-simulate `bst.System`. `ins=None` creates the ethanol feed internally from `feed_parameters`; pass a pre-built stream when integrating downstream of cellulosic ethanol. `req_saf` sets the SAF production target in MM gal/yr (ignored when `ins` is provided). |
-| `etj_no_facilities.py` | `create_etj_system_no_facilities(ins=None, req_saf=9)` — facilities-free variant of `create_etj_system`. Omits BT and WWT; WW_mixer (M601) and WW_cooler (H602) are still defined in the path so wastewater streams have a proper outlet ready to be wired into a combined system's central WWT. Use this when integrating the ETJ system with the RCF biorefinery. |
+| `etj_no_facilities.py` | `create_etj_system_no_facilities(ins=None)` — facilities-free variant for RCF biorefinery integration. Omits BT and WWT. ETJ wastewater is collected in `ETJ_WW_MIX` (renamed from `M601` to avoid ID conflict with the shared WWT's internal `M601`) and cooled in `H602`; the `H602` outlet is wired into the shared WWT by the calling script. The ETJ PSA reject (`etj_waste_gases`) must be appended to the shared `gas_mixer` by the caller (`gas_mixer.ins.append(F.etj_waste_gases)`). Module-level `CEPCI` override removed; the calling script controls the basis. See `lignin_saf/CLAUDE.md` → "RCF + ETJ Integrated Biorefinery" for the full integration pattern. |
 | `etj_run.py` | Thin standalone entry-point script; mirrors `rcf_4_21_2026`. Calls `create_etj_system(req_saf=9)`, simulates, and prints results. |
 | `etj_chemicals.py` | Chemical property definitions (Ethanol, Ethylene, olefins, alkanes, H₂, Syndol, Nickel_SiAl, CobaltMolybdenum, etc.) |
 | `etj_settings.py` | All process parameters: `feed_parameters`, `dehyd_data`, `olig_data`, `prod_selectivity`, `hydgn_data`, `price_data`, `h2_recovery` |
@@ -272,19 +272,25 @@ etj_sys = create_etj_system_no_facilities(ins=F.ethanol)
 ```
 WWT and BT are absent; the WW outlet of H602 (`WW_cooler.outs[0]`) should be wired into the combined system's central WWT mixer after the ETJ system is created.
 
-**OPEN BLOCKING ISSUE — thermo and flowsheet conflict with RCF integration:**
+**RCF biorefinery integration status (`rcf_with_etj.py`):**
 
-`create_etj_system_no_facilities` currently contains two lines that are incompatible with being called inside an RCF+ETJ combined script:
+The following changes were made to `etj_no_facilities.py` to enable integration:
 
+| Issue | Status |
+|---|---|
+| `bst.settings.CEPCI = 800.8` at module level overwrote the RCF 2016 basis | **Resolved** — line removed; combined system uses `CEPCI = 541.7` throughout |
+| `WW_mixer` ID `M601` conflicted with WWT's internal `M601` | **Resolved** — renamed to `ETJ_WW_MIX` |
+| `bst.settings.set_thermo(etj_chems)` at module level overwrote RCF thermo | **Functional** — `rcf_with_etj.py` calls `set_thermo(ligsaf_chems)` immediately after the import; `ligsaf_chemicals` is a strict superset of `etj_chemicals`, so all ETJ chemicals are present |
+| `bst.F.set_flowsheet('etj')` switched the active flowsheet | **Functional** — because this runs before any units are created in `rcf_with_etj.py`, all units (RCF + ETJ) consistently land in the 'etj' flowsheet; `F` aliases it; all `F.xxx` lookups work correctly |
+
+**Clean-up (future):** Guard the two remaining module-level lines with `if ins is None:` so they only fire in standalone mode and have no effect when the module is imported by an integrated script:
 ```python
-bst.F.set_flowsheet('etj')          # line 11 — switches active flowsheet away from main
-bst.settings.set_thermo(etj_chems)  # line 18 — overwrites RCF thermo with ETJ-only chemicals
-bst.settings.CEPCI = 800.8          # line 20 — overwrites CEPCI set by the RCF script
+if ins is None:
+    bst.F.set_flowsheet('etj')
+    bst.settings.set_thermo(etj_chems)
 ```
 
-The RCF system uses `ligsaf_chemicals` (cellulosic + RCF lignin chemicals, CEPCI=541.7). Calling `create_etj_system_no_facilities` after setting up the RCF system would silently discard the RCF thermo and switch to ETJ-only chemicals, breaking all RCF unit operations.
-
-**Required fix before RCF+ETJ integration is possible:** Create a merged chemical set containing all chemicals from both `ligsaf_chemicals.create_chemicals()` and `etj_chemicals.create_chemicals()`, set it as the global thermo once at the top of `rcf_with_etj.py`, then remove (or guard with `if ins is None`) the three lines above from `create_etj_system_no_facilities`. The CEPCI mismatch (541.7 vs 800.8) also needs a deliberate decision — either choose one basis or escalate all costs to a common year before combining TEA results.
+**Open TEA item:** `Hydrogen_In`, `RN`, `RD`, and `SAF` stream prices are not set in `etj_no_facilities.py`. The calling script (`rcf_with_etj.py`) must assign them before `tea.solve_price()`. See `lignin_saf/CLAUDE.md` → "RCF + ETJ Integrated Biorefinery" → "Open TEA items" for the required price assignments.
 
 TEA setup (after simulation):
 ```python
