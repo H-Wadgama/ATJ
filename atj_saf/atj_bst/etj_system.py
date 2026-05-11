@@ -3,17 +3,18 @@ import biosteam as bst, thermosteam as tmo, biorefineries as bf, numpy as np, pa
 from biorefineries import cellulosic
 from biosteam import main_flowsheet as F, units
 
+# Local imports
+from atj_saf.atj_bst.etj_chemicals import create_chemicals
+from atj_saf.atj_bst.etj_settings import feed_parameters, dehyd_data, olig_data, prod_selectivity, hydgn_data, price_data, h2_recovery
+from atj_saf.atj_bst.etj_utils import calculate_ethanol_flow
+from atj_saf.atj_bst.atj_bst_units import AdiabaticReactor, IsothermalReactor, EthanolStorageTank, HydrocarbonProductTank, HydrogenStorageTank, CatalystMixer
+from atj_saf.atj_bst.atj_bst_tea_saf import ConventionalEthanolTEA
+from cellulosic_tea_etj import create_cellulosic_ethanol_tea
+bst.F.set_flowsheet('etj') # F is the main flowsheet
+
 
 def create_etj_system(ins=None, req_saf=9):
-    # Local imports
-    from atj_saf.atj_bst.etj_chemicals import create_chemicals
-    from atj_saf.atj_bst.etj_settings import feed_parameters, dehyd_data, olig_data, prod_selectivity, hydgn_data, price_data, h2_recovery
-    from atj_saf.atj_bst.etj_utils import calculate_ethanol_flow
-    from atj_saf.atj_bst.atj_bst_units import AdiabaticReactor, IsothermalReactor, EthanolStorageTank, HydrocarbonProductTank, HydrogenStorageTank, CatalystMixer
-    from atj_saf.atj_bst.atj_bst_tea_saf import ConventionalEthanolTEA
-    from cellulosic_tea_etj import create_cellulosic_ethanol_tea
 
-    bst.F.set_flowsheet('etj') # F is the main flowsheet
 
     etj_chems = create_chemicals()
     bst.settings.set_thermo(etj_chems)
