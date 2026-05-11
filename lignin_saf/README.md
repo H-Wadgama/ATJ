@@ -78,11 +78,12 @@ from lignin_saf.ligsaf_utilities_system import create_rcf_utilities_system
 
 rcf_system               = create_rcf_system(ins=poplar_in)
 rcf_oil_purification_sys = create_rcf_oil_purification_system(ins=F.RCF_Oil)
+ethanol_system           = create_cellulosic_ethanol_system(ins=F.Carbohydrate_Pulp)
 BT, WWT, gas_mixer       = create_rcf_utilities_system()
 
 rcf_combined_system = bst.System(
     'Combined_RCF_System',
-    path=(rcf_system, rcf_oil_purification_sys, WWT),
+    path=(rcf_system, rcf_oil_purification_sys, ethanol_system, WWT),
     facilities=[gas_mixer, BT],   # gas_mixer must precede BT
 )
 rcf_combined_system.simulate()
@@ -160,9 +161,9 @@ BT.ins[0] = solid_mixer.outs[0]
 
 The cellulosic ethanol co-product uses the shared RCF utilities (BT, WWT) rather than its own. `ethanol_production.py` provides a local `create_cellulosic_ethanol_system` that passes `WWT=False, CHP=False` to `bst.create_all_facilities`, so no BT or WWT is ever created inside the ethanol system. This avoids all ID conflicts without post-hoc unit removal.
 
-After simulating the ethanol system, streams are routed into the shared utilities by explicit name. The ethanol system is kept out of the combined system path to avoid BioSTEAM's `update_configuration` subsystem-boundary rebuild; instead it is re-simulated via `add_specification(simulate=True)` before every combined-system pass, which keeps WWT and BT loads current when `bst.Model` samples parameters.
+`ethanol_system` is included **directly in the combined system path**. This is required for a correct TEA (so that ethanol CAPEX and revenue are included) and for correct BT CHP scope (so that the ethanol system's ~80 MW of steam demand is served by the shared BT rather than billed as market utilities).
 
-**Do not use a `sink is None` heuristic to identify ethanol streams.** It over-captures cooling tower evaporation (atmospheric), cooling water circulation streams, and the fermentation vent — none of which should be routed to BT or WWT. Use explicit stream names instead (verified against the stock `cellulosic.create_cellulosic_ethanol_system`).
+After creating the ethanol system, streams are routed into the shared utilities by explicit name. **Do not use a `sink is None` heuristic** — it over-captures cooling tower evaporation, cooling water circulation, and the fermentation vent, none of which should go to BT or WWT.
 
 Correct stream destinations:
 
@@ -198,13 +199,9 @@ F.unit.PWC.ins[0] = WWT.outs[2]
 
 rcf_combined_system = bst.System(
     'Combined_RCF_System',
-    path=(rcf_system, rcf_oil_purification_sys, monomer_purification_sys, WWT),
+    path=(rcf_system, rcf_oil_purification_sys, monomer_purification_sys, ethanol_system, WWT),
     facilities=[solids_to_BT, gas_mixer, BT],
 )
-
-@rcf_combined_system.add_specification(simulate=True)
-def update_ethanol():
-    ethanol_system.simulate()
 
 rcf_combined_system.simulate()
 ```

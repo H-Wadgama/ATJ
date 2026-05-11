@@ -451,23 +451,19 @@ F.unit.PWC.ins[0] = WWT.outs[2]
 
 `BT.utility_cost` does not include natural gas cost — BioSTEAM treats natural gas as a raw material billed through the TEA's `material_cost` (via `BT.ins[2].price`), not through `utility_cost`. The `fuel_price` parameter therefore does not appear in `utility_cost` comparisons, but it will affect `tea.solve_price()`. The RCF system uses `fuel_price=0.2612`; the stock cellulosic factory uses `fuel_price=0.218`.
 
-**Why `ethanol_system` is kept out of the combined system path:**
-
-Including `ethanol_system` in `path` triggers BioSTEAM's `update_configuration` when the ethanol system's utility specs (CWP, CT, PWC, CIP, ADP, FWT) adjust flows during simulation. `update_configuration` rebuilds all subsystem boundaries from a flat unit list and incorrectly pulls LLE200 (from `rcf_oil_purification_sys`) inside the ethanol system's boundary. The fix is `add_specification(simulate=True)`:
+**`ethanol_system` is included directly in the combined system path:**
 
 ```python
 rcf_combined_system = bst.System(
     'Combined_RCF_System',
-    path=(rcf_system, rcf_oil_purification_sys, monomer_purification_sys, WWT),
+    path=(rcf_system, rcf_oil_purification_sys, monomer_purification_sys, ethanol_system, WWT),
     facilities=[solids_to_BT, gas_mixer, BT],
 )
-
-@rcf_combined_system.add_specification(simulate=True)
-def update_ethanol():
-    ethanol_system.simulate()
 ```
 
-`simulate=True` fires the spec before every combined-system pass, so `ethanol_system` re-converges on each `bst.Model` sample that changes `Carbohydrate_Pulp` flow. The ethanol streams are already wired into the shared utilities, so WWT and BT loads update automatically.
+An earlier version of this code kept `ethanol_system` out of the path and re-simulated it via `add_specification(simulate=True)`, based on a concern that `update_configuration` would pull LLE200 into the ethanol system's boundary. This was tested and found to be incorrect in BioSTEAM 2.47 — LLE200 does not leak regardless of assembly strategy, and all stream flows converge identically either way.
+
+Keeping ethanol out of the path was actually wrong from a TEA standpoint: it caused the TEA to omit the ethanol system's CAPEX (~$85M installed) and the ethanol product revenue (~$124M/yr), artificially inflating the MSP by ~$1/kg. It also incorrectly scoped BT to only the RCF subsystem, leaving the ethanol system's ~80 MW of steam demand (M203 MPS, D402/D403/U401 LPS) served by market agents rather than the shared BT. Including `ethanol_system` in the path is the correct approach: BT serves all steam demand as a true integrated CHP, the TEA accounts for all CAPEX and co-product revenue, and the MSP reflects the full integrated biorefinery economics.
 
 **No ordering constraint:** Because `ethanol_production.py` never creates BT or WWT, the IDs `M601`, `WWTC`, `BT` etc. are never claimed by the ethanol system. `create_rcf_utilities_system()` can be called in any order relative to `create_cellulosic_ethanol_system`.
 
@@ -506,16 +502,12 @@ BT.ins[0] = solids_to_BT.outs[0]
 # Without this line PWC purchases ~480,000 kg/hr of fresh water unnecessarily (~$1.1M/yr).
 F.unit.PWC.ins[0] = WWT.outs[2]
 
-# 5. Assemble combined system — ethanol_system out of path, re-simulated via spec
+# 5. Assemble combined system — ethanol_system in path for correct TEA and BT CHP scope
 rcf_combined_system = bst.System(
     'Combined_RCF_System',
-    path=(rcf_system, rcf_oil_purification_sys, monomer_purification_sys, WWT),
+    path=(rcf_system, rcf_oil_purification_sys, monomer_purification_sys, ethanol_system, WWT),
     facilities=[solids_to_BT, gas_mixer, BT],
 )
-
-@rcf_combined_system.add_specification(simulate=True)
-def update_ethanol():
-    ethanol_system.simulate()
 
 rcf_combined_system.simulate()
 ```

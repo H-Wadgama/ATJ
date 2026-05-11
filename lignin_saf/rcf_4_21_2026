@@ -69,21 +69,11 @@ BT.ins[0] = solids_to_BT.outs[0]
 # ~480,000 kg/hr of fresh water unnecessarily (~$1.1M/yr spurious cost).
 F.unit.PWC.ins[0] = WWT.outs[2]
 
-# ethanol_system is kept out of the combined path deliberately.
-# Including it triggers BioSTEAM's update_configuration, which rebuilds all
-# subsystem boundaries from a flat unit list and incorrectly pulls LLE200
-# (from rcf_oil_purification_sys) inside the ethanol system's boundary.
-# The add_specification below re-simulates it before every combined pass
-# so that WWT and BT loads stay live when bst.Model samples parameters.
 rcf_combined_system = bst.System(
     'Combined_RCF_System',
-    path=(rcf_system, rcf_oil_purification_sys, monomer_purification_sys, WWT),
+    path=(rcf_system, rcf_oil_purification_sys, monomer_purification_sys, ethanol_system, WWT),
     facilities=[solids_to_BT, gas_mixer, BT],
 )
-
-@rcf_combined_system.add_specification(simulate=True)
-def update_ethanol():
-    ethanol_system.simulate()
 
 rcf_combined_system.simulate()
 rcf_combined_system.show()
