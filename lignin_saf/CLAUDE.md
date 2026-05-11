@@ -471,7 +471,7 @@ def update_ethanol():
 
 **No ordering constraint:** Because `ethanol_production.py` never creates BT or WWT, the IDs `M601`, `WWTC`, `BT` etc. are never claimed by the ethanol system. `create_rcf_utilities_system()` can be called in any order relative to `create_cellulosic_ethanol_system`.
 
-**Full implementation pattern (target for `rcf_4_21_2026` update):**
+**Full implementation pattern (current `rcf_4_21_2026`):**
 
 ```python
 from lignin_saf.ethanol_production import create_cellulosic_ethanol_system
@@ -524,7 +524,6 @@ rcf_combined_system.simulate()
 - `blowdown_recycle=True` in `ethanol_production.py` matches the stock factory: CT blowdown goes to PWC, not WWT. Setting it to `False` would leave CT blowdown with no sink and does not match the stock system's WWT loading.
 - `solids_to_BT` must appear before `BT` in the facilities list so its outlet is populated before BT consumes it.
 - The `strict_moisture_content=False` patch in `create_rcf_utilities_system()` applies to the shared WWT for both RCF and ethanol wastewater streams.
-- **`rcf_4_21_2026` still uses the old heuristic and `gas_mixer.ins.extend(etoh_gases)` — these need updating to match this pattern before the next TEA run.**
 
 ## TEA
 

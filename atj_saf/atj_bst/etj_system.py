@@ -1,5 +1,5 @@
 # Global imports
-import biosteam as bst, thermosteam as tmo, biorefineries as bf
+import biosteam as bst, thermosteam as tmo, biorefineries as bf, numpy as np, pandas as pd
 from biorefineries import cellulosic
 from biosteam import main_flowsheet as F, units
 
@@ -289,3 +289,11 @@ def create_etj_system():
 
     return etj_sys
 
+F.Ethanol_In.price = price_data['ethanol']            
+F.Hydrogen_In.price = price_data['hydrogen']
+F.RN.price = price_data['renewable_naphtha']
+saf_stream = F.SAF
+F.RD.price = price_data['renewable_diesel']
+F.Dehyd_cat_replacement.price = price_data['dehydration_catalyst']
+F.Olig_cat_replacement.price = price_data['oligomerization_catalyst']
+F.Hydgn_cat_replacement.price = price_data['hydrogenation_catalyst']
