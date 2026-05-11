@@ -45,10 +45,10 @@ def create_etj_system(ins=None, req_saf=9):
 
     #2) Ethylene oligomerization to olefins in gas and liquid phase
     oligomerization_rxn = bst.ParallelReaction([
-    bst.Reaction('2Ethylene,g -> Butene,g',            reactant = 'Ethylene',     X = olig_data['conv']*prod_selectivity['C4H8'],    basis = 'mol',  phases = 'lg',  correct_atomic_balance = True),
-    bst.Reaction('3Ethylene,g -> Hex-1-ene,g',       reactant = 'Ethylene',     X = olig_data['conv']*prod_selectivity['C6H12'],   basis = 'mol',  phases = 'lg',  correct_atomic_balance = True),
-    bst.Reaction('5Ethylene,g -> Dec-1-ene,l',         reactant = 'Ethylene',     X = olig_data['conv']*prod_selectivity['C10H20'],  basis = 'mol',  phases = 'lg',  correct_atomic_balance = True),
-    bst.Reaction('9Ethylene,g -> Octadec-1-ene,l',     reactant = 'Ethylene',     X = olig_data['conv']*prod_selectivity['C18H36'],  basis = 'mol',  phases = 'lg',  correct_atomic_balance = True)])
+    bst.Reaction('2Ethylene,g -> Butene,g',            reactant = 'Ethylene',     X = olig_data['conv']*prod_selectivity['C4H8'],    basis = 'wt',  phases = 'lg',  correct_atomic_balance = True),
+    bst.Reaction('3Ethylene,g -> Hex-1-ene,g',       reactant = 'Ethylene',     X = olig_data['conv']*prod_selectivity['C6H12'],   basis = 'wt',  phases = 'lg',  correct_atomic_balance = True),
+    bst.Reaction('5Ethylene,g -> Dec-1-ene,l',         reactant = 'Ethylene',     X = olig_data['conv']*prod_selectivity['C10H20'],  basis = 'wt',  phases = 'lg',  correct_atomic_balance = True),
+    bst.Reaction('9Ethylene,g -> Octadec-1-ene,l',     reactant = 'Ethylene',     X = olig_data['conv']*prod_selectivity['C18H36'],  basis = 'wt',  phases = 'lg',  correct_atomic_balance = True)])
 
 
     hydrogenation_rxn = bst.ParallelReaction([

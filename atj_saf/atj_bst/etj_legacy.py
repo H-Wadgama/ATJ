@@ -3,6 +3,8 @@
 import biosteam as bst, thermosteam as tmo, biorefineries as bf, numpy as np, pandas as pd
 from biorefineries import cellulosic
 from biosteam import main_flowsheet as F, units
+from cellulosic_tea_etj import create_cellulosic_ethanol_tea
+from atj_saf.atj_bst.etj_settings import price_data
 
 
 
@@ -213,3 +215,31 @@ flash_2.simulate()
 
 psa_splitter = bst.Splitter('S203', ins = flash_2-0, outs = (h2_recycle,'BT_feed'),  split = {'Hydrogen':h2_recovery})
 
+
+operators_per_section = 1  # operators per section from Seider recommendation
+num_process_sections = 5  # number of proces sections from Seider recommendation [5 areas - storage, upgrading, separation, wwt, bt)
+num_operators_per_shift = operators_per_section * num_process_sections * 1  # multiplied by 2 for large continuous flow process (e.g., 1000 ton/day product). from Seider pg 505
+num_shifts = 5  # number of shifts
+pay_rate = 40  # $/hr
+DWandB = num_operators_per_shift * num_shifts * 2080 * pay_rate  # direct wages and benefits. DWandB [$/year] = (operators/shift)*(5 shifts)*(40 hr/week)*(operating days/year-operator)*($/hr)
+Dsalaries_benefits = 0.15 * DWandB  # direct salaries and benefits from Seider
+O_supplies = 0.06 * DWandB  # Operating supplies and services from Seider
+technical_assistance = 5 * 75000  # $/year. Technical assistance to manufacturing. assume 5 workers at $75000/year
+control_lab = 5 * 80000  # $/year. Control laboratory. assume 5 workers at $80000/year
+labor = DWandB + Dsalaries_benefits + O_supplies + technical_assistance + control_lab 
+
+
+final_tea = create_cellulosic_ethanol_tea(atj_sys)
+
+F.Ethanol_In.price = price_data['ethanol']            
+F.Hydrogen_In.price = price_data['hydrogen']
+F.RN.price = price_data['renewable_naphtha']
+saf_stream = F.SAF
+F.RD.price = price_data['renewable_diesel']
+F.Dehyd_cat_replacement.price = price_data['dehydration_catalyst']
+F.Olig_cat_replacement.price = price_data['oligomerization_catalyst']
+F.Hydgn_cat_replacement.price = price_data['hydrogenation_catalyst']
+
+mjsp = round(((final_tea.solve_price(F.SAF)*F.SAF.rho)/264.172),2)
+
+print(f'The MSP for ETJ-derived SAF is  {mjsp} USD/gal')
