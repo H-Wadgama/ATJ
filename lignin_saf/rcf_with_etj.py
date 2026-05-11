@@ -6,6 +6,7 @@ from lignin_saf.monomer_purification import create_monomer_purification_system
 from lignin_saf.ligsaf_utilities_system import create_rcf_utilities_system
 from lignin_saf.ethanol_production_no_denaturant import create_cellulosic_ethanol_system
 from cellulosic_tea import create_cellulosic_ethanol_tea
+from atj_saf.atj_bst.etj_no_facilities import create_etj_system_no_facilities
 
 from biosteam import main_flowsheet as F
 import biosteam as bst

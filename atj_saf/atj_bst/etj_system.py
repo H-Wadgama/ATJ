@@ -11,15 +11,12 @@ from atj_saf.atj_bst.atj_bst_units import AdiabaticReactor, IsothermalReactor, E
 from atj_saf.atj_bst.atj_bst_tea_saf import ConventionalEthanolTEA
 from cellulosic_tea_etj import create_cellulosic_ethanol_tea
 bst.F.set_flowsheet('etj') # F is the main flowsheet
-
+bst.settings.CEPCI = 800.8 # For the year 2023 from https://personalpages.manchester.ac.uk/staff/tom.rodgers/Interactive_graphs/CEPCI.html?reactors/CEPCI/index.html
+etj_chems = create_chemicals()
+bst.settings.set_thermo(etj_chems)
 
 def create_etj_system(ins=None, req_saf=9):
 
-
-    etj_chems = create_chemicals()
-    bst.settings.set_thermo(etj_chems)
-
-    bst.settings.CEPCI = 800.8 # For the year 2023 from https://personalpages.manchester.ac.uk/staff/tom.rodgers/Interactive_graphs/CEPCI.html?reactors/CEPCI/index.html
 
     etoh_flow = calculate_ethanol_flow(req_saf)
 
