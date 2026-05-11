@@ -1,3 +1,5 @@
+# Combines RCF + cellulosic ethanol production + ETJ
+
 from lignin_saf.ligsaf_chemicals import create_chemicals
 from lignin_saf.ligsaf_settings import feed_parameters, prices
 from lignin_saf.ligsaf_system import create_rcf_system

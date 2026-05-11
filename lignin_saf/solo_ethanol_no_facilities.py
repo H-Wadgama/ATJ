@@ -1,3 +1,8 @@
+# BioSTEAMS native cellulosic ethanol production created without BT and WWT, which were then natively added
+# This script can be used as a test in the future for checking whether BT and WWT are correctly routed 
+# No MSP difference between solo_ethanol_no_facilities.py and solo_ethanol.py indicating that mass balance was converged
+
+
 from lignin_saf.ligsaf_settings import feed_parameters, prices
 from lignin_saf.ethanol_production import create_cellulosic_ethanol_system
 from biorefineries import cellulosic
