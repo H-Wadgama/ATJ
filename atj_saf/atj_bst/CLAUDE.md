@@ -10,7 +10,7 @@ Three-step catalytic conversion of bioethanol to sustainable aviation fuel (SAF)
 Bioethanol → [Dehydration, R201] → Ethylene → [Oligomerization, R202] → C4–C18 Olefins → [Hydrogenation, R203] → SAF + RN + RD
 ```
 
-**Design basis:** 9 MM gal/yr SAF output (~14,500 kg/hr ethanol feed at 90% operating factor).  
+**Design basis (standalone mode only):** `calculate_ethanol_flow()` provides an approximate ethanol feed for a target SAF output; used only when `ins=None`. When integrated with the cellulosic ethanol system (2,000 DMT/day poplar), `ins=F.Ethanol_Out` is passed and the feed flow is entirely determined upstream — `req_saf` is ignored.  
 **CEPCI basis:** 800.8 (2023 USD).
 
 ```python
@@ -28,7 +28,7 @@ etj_sys = bst.System('atj_sys',
 
 | Stream | Contents | Conditions | Price |
 |---|---|---|---|
-| `Ethanol_In` | 99.5% pure bioethanol (~14,500 kg/hr) | Liquid, 20°C, 1 atm | `price_data['ethanol']` — set on the stream by `create_etj_system()`. Only created internally when `ins=None`; otherwise the caller-supplied stream is used directly as `etoh_in`. |
+| `Ethanol_In` | 99.5% pure bioethanol | Liquid, 20°C, 1 atm | `price_data['ethanol']` — set on the stream by `create_etj_system()`. Only created internally when `ins=None`; otherwise the caller-supplied stream is used directly as `etoh_in`. |
 | `Hydrogen_In` | Fresh H₂ makeup; flow set by `h2_flow` spec | Gas, 30 bar | `price_data['hydrogen']` — $8.46/kg (PEM electrolysis, full value chain) |
 
 ## Unit Operations
@@ -120,7 +120,7 @@ etj_sys = bst.System('atj_sys',
 
 | Stream | Path | Notes |
 |---|---|---|
-| `dehyd_recycle` | S201 (70% split) → M201 | Unreacted ethanol; `MultiStream(phases=('g','l'))` |
+| `dehyd_recycle` | S201 (70% split) → M201 | Non-selective split — recycles all effluent components (ethylene, water, unreacted ethanol) at 70%. Intentional design: recycled mass increases thermal mass in the adiabatic catalyst bed, moderating the temperature drop across R201. At steady state ~70% of R201 inlet mass is recycled ethylene + water. `MultiStream(phases=('g','l'))` |
 | `ethylene_recycle` | S202 (split={'Ethylene':1.0}) → M202 | Unreacted ethylene; `MultiStream(phases=('g','l'))` |
 | `h2_recycle` | S203 (85 mol% H₂ recovery) → M203 | Excess hydrogen; `Stream(P=3e6, phase='g')` |
 
@@ -144,7 +144,7 @@ Ethanol,g → Water,g + Ethylene,g       X = 0.995
 ### Oligomerization (R202 — Isothermal, ParallelReaction)
 ```
 2 Ethylene,g → Butene,g                X = 0.993 × 0.20   (C4, 20% selectivity)
-1.5 Ethylene,g → Hex-1-ene,g          X = 0.993 × 0.15   (C6, 15% selectivity)
+3 Ethylene,g → Hex-1-ene,g            X = 0.993 × 0.15   (C6, 15% selectivity)
 5 Ethylene,g → Dec-1-ene,l            X = 0.993 × 0.62   (C10, 62% selectivity — SAF precursor)
 9 Ethylene,g → Octadec-1-ene,l        X = 0.993 × 0.03   (C18, 3% selectivity)
 ```
@@ -210,17 +210,22 @@ PSA (S203) recovers 85 mol% of the H₂ from the post-hydrogenation gas as `h2_r
 ## Factory Pattern Notes
 
 - **No individual `.simulate()` calls** — all units are defined then assembled into `bst.System`; `etj_sys.simulate()` drives sequential-modular convergence over all three recycle loops.
+- **S201 non-selective recycle (intentional):** S201 is a plain 70/30 splitter on the full R201 outlet, not a selective ethanol separator. All effluent components (ethylene, water, unreacted ethanol) are recycled at 70%. This increases the thermal mass through the adiabatic dehydration reactor, moderating the temperature drop across the catalyst bed. Consequence: at steady state ~70% of R201 inlet mass is non-reactive (ethylene + water), so WHSV-based catalyst weight and vessel sizing in `AdiabaticReactor._design()` use total `ins[0].F_mass` and are conservatively overestimated ~3.3× relative to an ethanol-only WHSV basis. This is a known bias — do not "fix" the recycle without understanding the thermal implication.
 - **Phase assignments on H302 / H303:** `rigorous=True` VLE at 15°C can produce a trace gas fraction for decane and octadecane streams. Each cooler uses `add_specification(run=False)` to call `_run()`, `_design()`, `_cost()` explicitly and then override `outs[0].phase = 'l'`. This ensures `HydrocarbonProductTank` always receives a single-phase liquid stream.
 - **Catalyst stream flows:** computed in `add_specification(run=True)` specs — these fire before each reactor's `_run()`, so the inlet flow from the current pass is used. This replicates what `_design()` would compute without requiring access to `design_results`.
 - **`h2_recycle` ordering:** `h2_storage` is positioned after `splitter_2` in the system path so that `olig_1.outs[0]` (olefin flows) is current-pass data when the `h2_flow` spec fires.
 
 ## Ethanol Flow Utility (`etj_utils.py`)
 
+Used only in standalone mode (`ins=None`). When integrated with the cellulosic ethanol system, `ins=F.Ethanol_Out` is passed and this function is never called — ethanol flow is set by the upstream system.
+
 ```python
 etoh_flow = calculate_ethanol_flow(req_saf=9, operating_factor=0.9)
-# Returns kg/hr of ethanol feed required for 9 MM gal/yr SAF
+# Returns an approximate kg/hr ethanol feed for a target SAF output — rough sizing only.
 # Formula: (1/0.56) × (1/0.8) × req_saf × 1e6 × (1/264.17) × 776 / (op_factor × 8760)
-# 0.56 = ethanol-to-ethylene mass yield; 0.8 = ethylene-to-C10 selectivity proxy; 776 = ethanol density kg/m³
+# 0.56 = ethanol-to-ethylene mass yield proxy; 0.8 = ethylene-to-C10 yield proxy (actual selectivity is 0.62);
+# 776 kg/m³ = approximate ethanol density used as a density proxy.
+# These are intentional approximations; the actual SAF output is determined by simulation.
 ```
 
 ## Key Source Files
