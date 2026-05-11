@@ -28,7 +28,7 @@ etj_sys = bst.System('atj_sys',
 
 | Stream | Contents | Conditions | Price |
 |---|---|---|---|
-| `Ethanol_In` | 99.5% pure bioethanol (~14,500 kg/hr) | Liquid, 20°C, 1 atm | `price_data['ethanol']` — set on the stream by `create_etj_system()` |
+| `Ethanol_In` | 99.5% pure bioethanol (~14,500 kg/hr) | Liquid, 20°C, 1 atm | `price_data['ethanol']` — set on the stream by `create_etj_system()`. Only created internally when `ins=None`; otherwise the caller-supplied stream is used directly as `etoh_in`. |
 | `Hydrogen_In` | Fresh H₂ makeup; flow set by `h2_flow` spec | Gas, 30 bar | `price_data['hydrogen']` — $8.46/kg (PEM electrolysis, full value chain) |
 
 ## Unit Operations
@@ -227,7 +227,8 @@ etoh_flow = calculate_ethanol_flow(req_saf=9, operating_factor=0.9)
 
 | File | Contents |
 |---|---|
-| `etj_system.py` | `create_etj_system()` — full factory function; returns ready-to-simulate `bst.System` |
+| `etj_system.py` | `create_etj_system(ins=None, req_saf=9)` — full factory function; returns ready-to-simulate `bst.System`. `ins=None` creates the ethanol feed internally from `feed_parameters`; pass a pre-built stream when integrating downstream of cellulosic ethanol. `req_saf` sets the SAF production target in MM gal/yr (ignored when `ins` is provided). |
+| `etj_run.py` | Thin standalone entry-point script; mirrors `rcf_4_21_2026`. Calls `create_etj_system(req_saf=9)`, simulates, and prints results. |
 | `etj_chemicals.py` | Chemical property definitions (Ethanol, Ethylene, olefins, alkanes, H₂, Syndol, Nickel_SiAl, CobaltMolybdenum, etc.) |
 | `etj_settings.py` | All process parameters: `feed_parameters`, `dehyd_data`, `olig_data`, `prod_selectivity`, `hydgn_data`, `price_data`, `h2_recovery` |
 | `etj_utils.py` | `calculate_ethanol_flow(req_saf, operating_factor)` — basis calculation utility |
@@ -243,13 +244,27 @@ etoh_flow = calculate_ethanol_flow(req_saf=9, operating_factor=0.9)
 
 ## Usage Pattern
 
+**Standalone (entry-point script or notebook):**
 ```python
 from atj_saf.atj_bst.etj_system import create_etj_system
 
-etj_sys = create_etj_system()
+etj_sys = create_etj_system(req_saf=9)   # thermo, CEPCI, and feed stream set internally
 etj_sys.simulate()
 etj_sys.show()
 ```
+Or run directly:
+```bash
+python -m atj_saf.atj_bst.etj_run
+```
+
+**Integrated downstream of cellulosic ethanol (future):**
+```python
+from atj_saf.atj_bst.etj_system import create_etj_system
+
+# Pass the ethanol stream produced upstream — thermo must already be set
+etj_sys = create_etj_system(ins=F.Ethanol_Out)
+```
+When `ins` is provided, `req_saf` is ignored; the feed flow is determined entirely by the upstream stream. Note that `create_etj_system()` still calls `create_chemicals()` and `bst.settings.set_thermo()` internally — this will need to be reconciled with the shared thermo of the integrated system when that integration is built (analogous to the `WWT=False, CHP=False` pattern in the RCF cellulosic ethanol integration).
 
 TEA setup (after simulation):
 ```python

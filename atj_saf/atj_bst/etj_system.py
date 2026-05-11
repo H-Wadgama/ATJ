@@ -4,7 +4,7 @@ from biorefineries import cellulosic
 from biosteam import main_flowsheet as F, units
 
 
-def create_etj_system():
+def create_etj_system(ins=None, req_saf=9):
     # Local imports
     from atj_saf.atj_bst.etj_chemicals import create_chemicals
     from atj_saf.atj_bst.etj_settings import feed_parameters, dehyd_data, olig_data, prod_selectivity, hydgn_data, price_data, h2_recovery
@@ -20,18 +20,20 @@ def create_etj_system():
 
     bst.settings.CEPCI = 800.8 # For the year 2023 from https://personalpages.manchester.ac.uk/staff/tom.rodgers/Interactive_graphs/CEPCI.html?reactors/CEPCI/index.html
 
-    etoh_flow = calculate_ethanol_flow(9)
+    etoh_flow = calculate_ethanol_flow(req_saf)
 
-
-    # Bioethanol feed
-    etoh_in = bst.Stream(
-        'Ethanol_In',
-        Ethanol = etoh_flow,
-        Water =  etoh_flow*((1-feed_parameters['purity'])/(feed_parameters['purity'])),
-        units = 'kg/hr',
-        T = feed_parameters['temperature'],
-        P = feed_parameters['pressure'],
-        phase = feed_parameters['phase'])
+    # Bioethanol feed — use caller-supplied stream or create from settings
+    if ins is None:
+        etoh_in = bst.Stream(
+            'Ethanol_In',
+            Ethanol = etoh_flow,
+            Water =  etoh_flow*((1-feed_parameters['purity'])/(feed_parameters['purity'])),
+            units = 'kg/hr',
+            T = feed_parameters['temperature'],
+            P = feed_parameters['pressure'],
+            phase = feed_parameters['phase'])
+    else:
+        etoh_in = ins
 
 
     # Reactions
