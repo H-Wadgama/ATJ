@@ -233,6 +233,7 @@ etoh_flow = calculate_ethanol_flow(req_saf=9, operating_factor=0.9)
 | File | Contents |
 |---|---|
 | `etj_system.py` | `create_etj_system(ins=None, req_saf=9)` — full factory function; returns ready-to-simulate `bst.System`. `ins=None` creates the ethanol feed internally from `feed_parameters`; pass a pre-built stream when integrating downstream of cellulosic ethanol. `req_saf` sets the SAF production target in MM gal/yr (ignored when `ins` is provided). |
+| `etj_no_facilities.py` | `create_etj_system_no_facilities(ins=None, req_saf=9)` — facilities-free variant of `create_etj_system`. Omits BT and WWT; WW_mixer (M601) and WW_cooler (H602) are still defined in the path so wastewater streams have a proper outlet ready to be wired into a combined system's central WWT. Use this when integrating the ETJ system with the RCF biorefinery. |
 | `etj_run.py` | Thin standalone entry-point script; mirrors `rcf_4_21_2026`. Calls `create_etj_system(req_saf=9)`, simulates, and prints results. |
 | `etj_chemicals.py` | Chemical property definitions (Ethanol, Ethylene, olefins, alkanes, H₂, Syndol, Nickel_SiAl, CobaltMolybdenum, etc.) |
 | `etj_settings.py` | All process parameters: `feed_parameters`, `dehyd_data`, `olig_data`, `prod_selectivity`, `hydgn_data`, `price_data`, `h2_recovery` |
@@ -262,14 +263,15 @@ Or run directly:
 python -m atj_saf.atj_bst.etj_run
 ```
 
-**Integrated downstream of cellulosic ethanol (future):**
+**Integrated into a combined biorefinery (e.g. RCF + ETJ):**
 ```python
-from atj_saf.atj_bst.etj_system import create_etj_system
+from atj_saf.atj_bst.etj_no_facilities import create_etj_system_no_facilities
 
-# Pass the ethanol stream produced upstream — thermo must already be set
-etj_sys = create_etj_system(ins=F.Ethanol_Out)
+# Thermo must already be set by the calling script before this is called.
+# Pass the ethanol stream produced upstream; req_saf is ignored when ins is provided.
+etj_sys = create_etj_system_no_facilities(ins=F.Ethanol_Out)
 ```
-When `ins` is provided, `req_saf` is ignored; the feed flow is determined entirely by the upstream stream. Note that `create_etj_system()` still calls `create_chemicals()` and `bst.settings.set_thermo()` internally — this will need to be reconciled with the shared thermo of the integrated system when that integration is built (analogous to the `WWT=False, CHP=False` pattern in the RCF cellulosic ethanol integration).
+`create_etj_system_no_facilities` still calls `create_chemicals()` and `bst.settings.set_thermo()` internally — reconcile with the shared thermo of the combined system (analogous to the `WWT=False, CHP=False` pattern in `ethanol_production.py`). WWT and BT are absent; the WW outlet of H602 (`WW_cooler.outs[0]`) should be wired into the combined system's central WWT mixer after the ETJ system is created.
 
 TEA setup (after simulation):
 ```python
