@@ -1,7 +1,7 @@
 # Combines RCF + cellulosic ethanol production + ETJ
 
-from lignin_saf.ligsaf_chemicals import create_chemicals
-from lignin_saf.ligsaf_settings import feed_parameters, prices
+from lignin_saf.chemicals import create_chemicals
+from lignin_saf.settings import feed_parameters, prices
 from lignin_saf.ligsaf_system import create_rcf_system
 from lignin_saf.ligsaf_purification_system import create_rcf_oil_purification_system
 from lignin_saf.monomer_purification import create_monomer_purification_system
@@ -59,20 +59,15 @@ etoh_ww     = [F.pretreatment_wastewater, F.unit.S401.outs[1]]
 etoh_solids = [F.unit.S401.outs[0]]
 
 
-
+# Removing the NH3 fraction of the ethanol output - in the future CBP will remove this anyways, so I've just modelled it as a splitter
 nh3_splitter = bst.units.Splitter(ins = F.T703.outs[0], split = {'NH3':1.0} )
 nh3_splitter.simulate()
 
-# Ethanol to Jet
+# Ethanol to Jet system
 etj_system = create_etj_system_no_facilities(ins = nh3_splitter.outs[1])
 etj_system.simulate()
 
 etoh_ww.append(F.H602.outs[0])
-
-
-
-
-
 
 
 # ── Area 400/500: Shared utilities ─────────────────────────────────────────
@@ -84,8 +79,6 @@ F.unit.M601.ins.extend(etoh_ww)
 solids_to_BT = bst.Mixer('MIX_BT_solids', ins=[WWT.outs[1]] + etoh_solids)
 BT.ins[0] = solids_to_BT.outs[0]
 # Fermentation vent is atmospheric — do NOT route to gas_mixer
-
-
 
 
 # Wire WWT RO-treated water to PWC; create_all_facilities(WWT=False) leaves M2

@@ -2,7 +2,7 @@ import biosteam as bst
 import numpy as np
 from biosteam import main_flowsheet as F
 
-from lignin_saf.ligsaf_settings import (
+from lignin_saf.settings import (
     hexane_purification,
     hexane_partition_IDs,
     hexane_partition_K,

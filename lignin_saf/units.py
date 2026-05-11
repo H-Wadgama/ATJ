@@ -11,7 +11,7 @@ from biosteam.units.design_tools import (
     PressureVessel, 
 )
  
-from lignin_saf.ligsaf_settings import solvolysis_parameters
+from lignin_saf.settings import solvolysis_parameters
 
 class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
 
@@ -464,7 +464,7 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
 
 
 
-from lignin_saf.ligsaf_settings import rcf_oil_yield, h2_consumption, feed_parameters, RCF_catalyst, prices
+from lignin_saf.settings import rcf_oil_yield, h2_consumption, feed_parameters, RCF_catalyst, prices
 
 class HydrogenolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
 
