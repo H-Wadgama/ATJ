@@ -1,27 +1,31 @@
-import thermosteam as tmo, biorefineries
+import thermosteam as tmo
 from biorefineries import cellulosic
 
 
 def create_chemicals():
 
-
-    # copying cellulosic ethanol chemicals 
+    """
+    Create and return the complete chemical set for a complete biomass to SAF biorefinery
+    extending the base cellulosic ethanol chemicals with olefins, paraffins, lignin compounds, 
+    catalysts, and other chemicals.
+    """
+    # --- Base chemical set ---
     ligsaf_chems = cellulosic.create_cellulosic_ethanol_chemicals().copy()
 
-    # Adding pre-existing chemicals
+    # --- RCF chemicals and solvents ---
     methanol = tmo.Chemical('Methanol')
     hydrogen = tmo.Chemical('Hydrogen')
     methane = tmo.Chemical('Methane')
     hexane = tmo.Chemical('Hexane')
     ethyl_acetate = tmo.Chemical('EthylAcetate')
     ethylene = tmo.Chemical('Ethylene')
-    butene = tmo.Chemical('Butene')          # Butene and hexene are representative surrogates for renewable naphtha
+    butene = tmo.Chemical('Butene')         
     hexene = tmo.Chemical('Hex-1-ene')  
-    decene = tmo.Chemical('Dec-1-ene')       # Decene is representative for SAF
-    octene = tmo.Chemical('Octadec-1-ene')   # Octadecene is representative for renewable diesel
-    butane = tmo.Chemical('Butane')
-    decane = tmo.Chemical('Decane')
-    octadecane = tmo.Chemical('Octadecane')  
+    decene = tmo.Chemical('Dec-1-ene')      
+    octene = tmo.Chemical('Octadec-1-ene')  
+    butane = tmo.Chemical('Butane')         # Renewable naphtha surrogate [1], along with hexane
+    decane = tmo.Chemical('Decane')         # SAF surrogate (Jet-A range: C8-C16) [1, 2]
+    octadecane = tmo.Chemical('Octadecane') # Renewable diesel surrogate 
 
     activated_carbon = tmo.Chemical('ActivatedCarbon', search_db=False, default=True, phase='s')
     NiC = tmo.Chemical('NiC', search_db=False, default = True, phase = 's')
