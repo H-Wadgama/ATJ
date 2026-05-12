@@ -20,7 +20,7 @@ import math
 from math import ceil
 import biosteam as bst
 from lignin_saf.chemicals import create_chemicals
-from lignin_saf.settings import (
+from lignin_saf.ligsaf_settings import (
     rcf_conditions, feed_parameters, solvolysis_parameters,
     poplar_density, free_frac,
 )
@@ -212,7 +212,7 @@ class TestSizingMath:
 @pytest.fixture(scope='module')
 def simulated_reactor():
     """Build and simulate a minimal SolvolysisReactor, return the unit."""
-    from lignin_saf.units import SolvolysisReactor
+    from lignin_saf.ligsaf_units import SolvolysisReactor
 
     chems = create_chemicals()
     bst.settings.set_thermo(chems)

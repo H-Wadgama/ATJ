@@ -1,4 +1,4 @@
-from lignin_saf.ligsaf_system import ligsaf_system
+from lignin_saf.systems.rcf import ligsaf_system
 
 
 def main():
