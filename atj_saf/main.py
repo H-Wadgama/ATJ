@@ -1,5 +1,5 @@
-from atj_saf.atj_baseline.systems import atj_system
-from atj_saf.atj_baseline.systems import perform_tea
+from atj_saf.atj_qsd.systems import atj_system
+from atj_saf.atj_qsd.systems import perform_tea
 
 
 

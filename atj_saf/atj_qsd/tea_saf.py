@@ -1,5 +1,5 @@
 import biosteam as bst, pandas as pd
-from atj_saf.atj_baseline.tea_abstract import AbstractTEA
+from atj_saf.atj_qsd.tea_abstract import AbstractTEA
 
 __all__ = (
     'ConventionalEthanolTEA', 

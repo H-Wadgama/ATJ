@@ -234,7 +234,7 @@ etoh_flow = calculate_ethanol_flow(req_saf=9, operating_factor=0.9)
 |---|---|
 | `etj_system.py` | `create_etj_system(ins=None, req_saf=9)` — full factory function; returns ready-to-simulate `bst.System`. `ins=None` creates the ethanol feed internally from `feed_parameters`; pass a pre-built stream when integrating downstream of cellulosic ethanol. `req_saf` sets the SAF production target in MM gal/yr (ignored when `ins` is provided). |
 | `etj_no_facilities.py` | `create_etj_system_no_facilities(ins=None)` — facilities-free variant for RCF biorefinery integration. Omits BT and WWT. ETJ wastewater is collected in `ETJ_WW_MIX` (renamed from `M601` to avoid ID conflict with the shared WWT's internal `M601`) and cooled in `H602`; the `H602` outlet is wired into the shared WWT by the calling script. The ETJ PSA reject (`etj_waste_gases`) must be appended to the shared `gas_mixer` by the caller (`gas_mixer.ins.append(F.etj_waste_gases)`). Module-level `CEPCI` override removed; the calling script controls the basis. See `lignin_saf/CLAUDE.md` → "RCF + ETJ Integrated Biorefinery" for the full integration pattern. |
-| `etj_run.py` | Thin standalone entry-point script; mirrors `rcf_4_21_2026`. Calls `create_etj_system(req_saf=9)`, simulates, and prints results. |
+| `etj_run.py` | Thin standalone entry-point script; mirrors `scripts/rcf_etoh.py`. Calls `create_etj_system(req_saf=9)`, simulates, and prints results. |
 | `etj_chemicals.py` | Chemical property definitions (Ethanol, Ethylene, olefins, alkanes, H₂, Syndol, Nickel_SiAl, CobaltMolybdenum, etc.) |
 | `etj_settings.py` | All process parameters: `feed_parameters`, `dehyd_data`, `olig_data`, `prod_selectivity`, `hydgn_data`, `price_data`, `h2_recovery` |
 | `etj_utils.py` | `calculate_ethanol_flow(req_saf, operating_factor)` — basis calculation utility |
@@ -242,7 +242,7 @@ etoh_flow = calculate_ethanol_flow(req_saf=9, operating_factor=0.9)
 | `atj_bst_tea_saf.py` | `ConventionalEthanolTEA` — TEA class for the ETJ system |
 | `atj_bst_tea_abstract.py` | `AbstractTEA` base class |
 | `cellulosic_tea_etj.py` | `create_cellulosic_ethanol_tea()` — TEA for cellulosic ethanol co-production variant |
-| `etj_bst_system.ipynb` | Main working notebook: uncertainty, sensitivity, and contour plot analysis |
+| `etj_system.ipynb` | Main working notebook: uncertainty, sensitivity, and contour plot analysis |
 | `breakdown_plot.py` | Cost breakdown pie charts |
 | `uncertainty_plot.py` | Monte Carlo uncertainty visualization |
 | `selectivity_plot.py` | Oligomerization selectivity sensitivity |
@@ -272,7 +272,7 @@ etj_sys = create_etj_system_no_facilities(ins=F.ethanol)
 ```
 WWT and BT are absent; the WW outlet of H602 (`WW_cooler.outs[0]`) should be wired into the combined system's central WWT mixer after the ETJ system is created.
 
-**RCF biorefinery integration status (`rcf_with_etj.py`):**
+**RCF biorefinery integration status (`scripts/rcf_etoh_etj.py`):**
 
 The following changes were made to `etj_no_facilities.py` to enable integration:
 
@@ -280,8 +280,8 @@ The following changes were made to `etj_no_facilities.py` to enable integration:
 |---|---|
 | `bst.settings.CEPCI = 800.8` at module level overwrote the RCF 2016 basis | **Resolved** — line removed; combined system uses `CEPCI = 541.7` throughout |
 | `WW_mixer` ID `M601` conflicted with WWT's internal `M601` | **Resolved** — renamed to `ETJ_WW_MIX` |
-| `bst.settings.set_thermo(etj_chems)` at module level overwrote RCF thermo | **Functional** — `rcf_with_etj.py` calls `set_thermo(ligsaf_chems)` immediately after the import; `ligsaf_chemicals` is a strict superset of `etj_chemicals`, so all ETJ chemicals are present |
-| `bst.F.set_flowsheet('etj')` switched the active flowsheet | **Functional** — because this runs before any units are created in `rcf_with_etj.py`, all units (RCF + ETJ) consistently land in the 'etj' flowsheet; `F` aliases it; all `F.xxx` lookups work correctly |
+| `bst.settings.set_thermo(etj_chems)` at module level overwrote RCF thermo | **Functional** — `scripts/rcf_etoh_etj.py` calls `set_thermo(ligsaf_chems)` immediately after the import; `ligsaf_chemicals` is a strict superset of `etj_chemicals`, so all ETJ chemicals are present |
+| `bst.F.set_flowsheet('etj')` switched the active flowsheet | **Functional** — because this runs before any units are created in `scripts/rcf_etoh_etj.py`, all units (RCF + ETJ) consistently land in the 'etj' flowsheet; `F` aliases it; all `F.xxx` lookups work correctly |
 
 **Clean-up (future):** Guard the two remaining module-level lines with `if ins is None:` so they only fire in standalone mode and have no effect when the module is imported by an integrated script:
 ```python
@@ -290,7 +290,7 @@ if ins is None:
     bst.settings.set_thermo(etj_chems)
 ```
 
-**Open TEA item:** `Hydrogen_In`, `RN`, `RD`, and `SAF` stream prices are not set in `etj_no_facilities.py`. The calling script (`rcf_with_etj.py`) must assign them before `tea.solve_price()`. See `lignin_saf/CLAUDE.md` → "RCF + ETJ Integrated Biorefinery" → "Open TEA items" for the required price assignments.
+**Open TEA item:** `Hydrogen_In`, `RN`, `RD`, and `SAF` stream prices are not set in `etj_no_facilities.py`. The calling script (`scripts/rcf_etoh_etj.py`) must assign them before `tea.solve_price()`. See `lignin_saf/CLAUDE.md` → "RCF + ETJ Integrated Biorefinery" → "Open TEA items" for the required price assignments.
 
 TEA setup (after simulation):
 ```python

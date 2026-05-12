@@ -1,7 +1,7 @@
 # PSA
 
 import biosteam as bst, qsdsan as qs
-from atj_saf.atj_baseline.data.other_parameters import *
+from atj_saf.atj_qsd.data.other_parameters import *
 
 class PressureSwingAdsorption(qs.sanunits.Splitter, bst.Unit):
 

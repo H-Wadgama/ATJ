@@ -47,14 +47,18 @@ python -m atj_saf.main
 This simulates the system and prints the Minimum Jet Selling Price (MJSP) in $/gal.
 
 **Interactive analysis** is done primarily through Jupyter notebooks:
-- `atj_saf/atj_bst/etj_bst_system.ipynb` — BioSTEAM-native ATJ/ETJ system with uncertainty, sensitivity, and contour plot analysis
+- `atj_saf/atj_bst/etj_system.ipynb` — BioSTEAM-native ATJ/ETJ system with uncertainty, sensitivity, and contour plot analysis
 - `lignin_saf/rcf_system.ipynb` — Integrated RCF + cellulosic ethanol system (main active notebook)
 
 **RCF system as a standalone script:**
-- `lignin_saf/rcf_4_21_2026` — Thin entry-point script for the RCF loop. Sets up thermo, defines the Poplar feedstock stream, then calls `create_rcf_system()` from `ligsaf_system.py`. Use this for quick iteration on the RCF loop in isolation.
+- `scripts/rcf_etoh.py` — Builds and simulates the full integrated RCF + cellulosic ethanol system.
+- `scripts/rcf_etoh_etj.py` — Extends the above with ETJ catalytic upgrading of the cellulosic ethanol co-product.
 
 ```python
-# Pattern used in rcf_4_21_2026 — mirrors cellulosic_ethanol_legacy.py
+# Entry-point pattern (scripts/rcf_etoh.py)
+from lignin_saf.ligsaf_chemicals import create_chemicals
+from lignin_saf.systems.rcf import create_rcf_system
+
 chems = create_chemicals()
 bst.settings.set_thermo(chems)
 bst.settings.CEPCI = 541.7
@@ -78,7 +82,7 @@ Two sub-implementations exist:
 | Sub-package | Framework | Entry point |
 |---|---|---|
 | `atj_baseline/` | QSDsan (`qs.SanStream`, `qs.System`) | `atj_saf/main.py` → `systems.py` |
-| `atj_bst/` | Pure BioSTEAM (`bst.Stream`, `bst.System`) + `biorefineries` | `etj_bst_system.ipynb` |
+| `atj_bst/` | Pure BioSTEAM (`bst.Stream`, `bst.System`) + `biorefineries` | `etj_system.ipynb` |
 
 **Key files in `atj_saf/atj_baseline/`:**
 - `systems.py` — `create_atj_system()` builds the full unit-by-unit flowsheet; `perform_tea()` sets up TEA
@@ -104,17 +108,20 @@ Two-reactor RCF process: **poplar → solvolysis + hydrogenolysis → lignin oil
 
 **Key files:**
 - `rcf_system.ipynb` — main working notebook; builds and simulates the full integrated system
-- `rcf_4_21_2026` — standalone Python script for the RCF loop only (`rcf_system`); no integrated downstream systems. All units are defined without individual `.simulate()` calls — phase assignments are handled via `add_specification` decorators and `rcf_system.simulate()` drives convergence of both recycle loops.
-- `cellulosic_ethanol_legacy.py` — minimal script that builds and simulates the cellulosic ethanol system in isolation using `cellulosic.create_cellulosic_ethanol_system()`; useful as a reference for how BioSTEAM factory functions work
 - `ligsaf_units.py` — custom units: `SolvolysisReactor`, `HydrogenolysisReactor`, `PSA`, `CatalystMixer`
 - `ligsaf_settings.py` — all RCF process parameters (conditions, catalyst loading, biomass composition, oil composition)
 - `ligsaf_chemicals.py` — chemical definitions for the RCF system
-- `ligsaf_abstract_tea.py` — `AbstractTEA` base class (imported by `ligsaf_tea.py`)
 - `cellulosic_tea.py` — `CellulosicEthanolTEA` used for the integrated system TEA
-- `ligsaf_tea.py` — `ConventionalEthanolTEA` alternative
-- `ligsaf_system.py` — **`create_rcf_system(ins=None)`** factory function; encapsulates all 20 unit operations, both recycle loops, and all `add_specification` decorators. Returns a ready-to-simulate `bst.System`. Import and call pattern:
+- `ligsaf_plots.py` — reusable figure-generation functions (installed cost and operating cost breakdowns)
+- `systems/rcf.py` — **`create_rcf_system(ins=None)`** — Area 200 RCF loop factory
+- `systems/rcf_oil_purification.py` — **`create_rcf_oil_purification_system()`** — ethyl acetate LLE
+- `systems/monomer_purification.py` — **`create_monomer_purification_system()`** — hexane LLE
+- `systems/cellulosic_ethanol.py` — **`create_cellulosic_ethanol_system()`** — cellulosic ethanol co-product
+- `systems/ligsaf_utilities.py` — **`create_rcf_utilities_system()`** — shared BT + WWT (returns `(BT, WWT, gas_mixer)`)
+
+Import pattern:
   ```python
-  from lignin_saf.ligsaf_system import create_rcf_system
+  from lignin_saf.systems.rcf import create_rcf_system
   rcf_system = create_rcf_system(ins=poplar_in)  # ins=None uses default feed from ligsaf_settings
   ```
   Note: `chems.define_group('Poplar', ...)` must be called before creating any stream with `Poplar` as a component — do this in the calling script after `bst.settings.set_thermo(chems)`, before passing `ins` to the factory.

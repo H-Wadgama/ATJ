@@ -74,7 +74,7 @@ Recycle specs: fresh feed in each mixer is adjusted so that `fresh + recycle = r
 
 **`pulp_purifier` vapor outlet (D601, `outs[0]`):** The flash overhead contains evaporated MeOH and water stripped from the biomass pulp. It is currently unconnected — the solvent is not recovered. A future implementation should route this stream to `wastewater_mixer` (for WWT) or to a dedicated solvent recovery unit. When doing so, move `pulp_purifier` before `wastewater_mixer` in the path and add `pulp_purifier.outs[0]` to `wastewater_mixer.ins`.
 
-**Hydrogenolysis reactions — `_X_scale = 1 − 1e−6` numerical guard (`ligsaf_system.py`):** The six parallel reactions are set up so that ΣXi = Monomers + Dimers + Oligomers = 1.0 exactly (algebraic identity, holds for any `condensation_extent`). BioSTEAM's `ParallelReaction` captures each reactant's initial mass and subtracts Xi × SL0 in sequence; the residual `SL0 × (1 − ΣXi)` should be zero but floating-point arithmetic can produce a tiny negative value. At high delignification (large SL0), this absolute error can exceed BioSTEAM's −1e−12 threshold, raising `InfeasibleRegion`. All X values are therefore multiplied by `(1 − 1e−6)` so ~1 ppm of SolubleLignin passes through unconverted — negligible for the mass balance and TEA. If `condensation_extent` or `rcf_oil_yield` fractions are changed, the guard remains valid as long as the new fractions still sum to 1.0.
+**Hydrogenolysis reactions — `_X_scale = 1 − 1e−6` numerical guard (`systems/rcf.py`):** The six parallel reactions are set up so that ΣXi = Monomers + Dimers + Oligomers = 1.0 exactly (algebraic identity, holds for any `condensation_extent`). BioSTEAM's `ParallelReaction` captures each reactant's initial mass and subtracts Xi × SL0 in sequence; the residual `SL0 × (1 − ΣXi)` should be zero but floating-point arithmetic can produce a tiny negative value. At high delignification (large SL0), this absolute error can exceed BioSTEAM's −1e−12 threshold, raising `InfeasibleRegion`. All X values are therefore multiplied by `(1 − 1e−6)` so ~1 ppm of SolubleLignin passes through unconverted — negligible for the mass balance and TEA. If `condensation_extent` or `rcf_oil_yield` fractions are changed, the guard remains valid as long as the new fractions still sum to 1.0.
 
 **`SolvolysisReactor._run()` solvent retention — hardcoded to `('Methanol', 'Water')`:** The loop that deposits a small fraction of solvent into the biomass stream is:
 ```python
@@ -150,7 +150,7 @@ Note: N_total, V_void, V_max, D/L/u are determined by bed geometry and do not ch
 | D / L / L/D | ~3.58 m / ~17.9 m / 5.0 |
 | Effective u (after L/D cap) | ~0.0078 m/s |
 
-**`compute_Q_total()` method:** Returns Q_total [m³/hr] from geometry without side effects. Called by the `meoh_water_flow` spec in `ligsaf_system.py` on every recycle iteration to set the methanol feed flow.
+**`compute_Q_total()` method:** Returns Q_total [m³/hr] from geometry without side effects. Called by the `meoh_water_flow` spec in `systems/rcf.py` on every recycle iteration to set the methanol feed flow.
 
 ## HydrogenolysisReactor Sizing Model
 
@@ -188,19 +188,19 @@ u = Q_per_reactor / (A × 3600)
 
 ## Downstream Systems (outside rcf_system)
 
-- `rcf_oil_purification_sys` — built by `create_rcf_oil_purification_system()` in `ligsaf_purification_system.py`; EtOAc LLE on `RCF_Oil` → `Purified_RCF_Oil`
+- `rcf_oil_purification_sys` — built by `create_rcf_oil_purification_system()` in `systems/rcf_oil_purification.py`; EtOAc LLE on `RCF_Oil` → `Purified_RCF_Oil`
 - `etoh_system` — cellulosic ethanol from `biorefineries.cellulosic`, fed by `Carbohydrate_Pulp`
-- `monomer_purification_sys` — hexane LLE for monomer/dimer separation; built by `create_monomer_purification_system()` in `monomer_purification.py`; K-values are placeholders (K=2.0 for all monomers) pending experimental hexane/water LLE data
+- `monomer_purification_sys` — hexane LLE for monomer/dimer separation; built by `create_monomer_purification_system()` in `systems/monomer_purification.py`; K-values are placeholders (K=2.0 for all monomers) pending experimental hexane/water LLE data
 - `combined_sys` — full integrated system wrapping all of the above (330 days/yr × 24 hr)
 - `combined_sys_hx` — same with `HeatExchangerNetwork` (T_min_app=10°C)
 
 ## RCF Oil Purification System
 
-Built by `create_rcf_oil_purification_system(ins=None)` in `ligsaf_purification_system.py`. Accepts the crude `RCF_Oil` stream from FLASH118 and recovers it as `Purified_RCF_Oil` via ethyl acetate liquid–liquid extraction.
+Built by `create_rcf_oil_purification_system(ins=None)` in `systems/rcf_oil_purification.py`. Accepts the crude `RCF_Oil` stream from FLASH118 and recovers it as `Purified_RCF_Oil` via ethyl acetate liquid–liquid extraction.
 
 **Import pattern:**
 ```python
-from lignin_saf.ligsaf_purification_system import create_rcf_oil_purification_system
+from lignin_saf.systems.rcf_oil_purification import create_rcf_oil_purification_system
 rcf_oil_purification_sys = create_rcf_oil_purification_system(ins=F.RCF_Oil)
 rcf_oil_purification_sys.simulate()
 ```
@@ -253,11 +253,11 @@ K = c_extract (EtOAc-rich) / c_raffinate (water-rich). All values are placeholde
 
 ## Monomer Purification System
 
-Built by `create_monomer_purification_system(ins=None)` in `monomer_purification.py`. Accepts `Purified_RCF_Oil` (bottoms of FLASH201) and separates monomers/dimers from oligomers via hexane liquid–liquid extraction.
+Built by `create_monomer_purification_system(ins=None)` in `systems/monomer_purification.py`. Accepts `Purified_RCF_Oil` (bottoms of FLASH201) and separates monomers/dimers from oligomers via hexane liquid–liquid extraction.
 
 **Import pattern:**
 ```python
-from lignin_saf.monomer_purification import create_monomer_purification_system
+from lignin_saf.systems.monomer_purification import create_monomer_purification_system
 monomer_purification_sys = create_monomer_purification_system(ins=F.Purified_RCF_Oil)
 monomer_purification_sys.simulate()
 ```
@@ -311,7 +311,7 @@ K = c_extract (hexane-rich) / c_raffinate (water-rich). All values are placehold
 
 ## Utilities System (Area 400 + 500)
 
-Built by `create_rcf_utilities_system()` in `ligsaf_utilities_system.py`. Returns `(BT, WWT, gas_mixer)`. Call after all upstream factory functions so the required named streams exist on the flowsheet.
+Built by `create_rcf_utilities_system()` in `systems/ligsaf_utilities.py`. Returns `(BT, WWT, gas_mixer)`. Call after all upstream factory functions so the required named streams exist on the flowsheet.
 
 **Assembly pattern:**
 ```python
@@ -350,7 +350,7 @@ Combines PSA purge gas and WWT biogas before the BT gas combustion slot. Listed 
 
 Note: `WastePulp` is predominantly water. In `CENT203`, `split={'EthylAcetate': 0.95}` means Water defaults to split=0.0 (all water → `outs[1]` = WastePulp). Only 5% of EtOAc ends up in WastePulp.
 
-The internal `SludgeCentrifuge` (S603) is patched after WWT creation in `create_rcf_utilities_system()` (`ligsaf_utilities_system.py`):
+The internal `SludgeCentrifuge` (S603) is patched after WWT creation in `create_rcf_utilities_system()` (`systems/ligsaf_utilities.py`):
 
 ```python
 for unit in WWT.units:
@@ -399,11 +399,11 @@ BioSTEAM's BT auto-derives combustion reactions from a chemical's elemental form
 
 ## Unified utilities for the integrated biorefinery
 
-`rcf_4_21_2026` integrates the cellulosic ethanol co-product using the shared RCF utilities (BT, WWT) as the biorefinery-wide utilities. The local `ethanol_production.py` provides `create_cellulosic_ethanol_system` with `WWT=False, CHP=False` passed to `bst.create_all_facilities`, so the ethanol system never creates its own BT or WWT. This eliminates the ID-conflict problem entirely — no post-hoc unit removal is needed.
+`scripts/rcf_etoh.py` integrates the cellulosic ethanol co-product using the shared RCF utilities (BT, WWT) as the biorefinery-wide utilities. The local `systems/cellulosic_ethanol.py` provides `create_cellulosic_ethanol_system` with `WWT=False, CHP=False` passed to `bst.create_all_facilities`, so the ethanol system never creates its own BT or WWT. This eliminates the ID-conflict problem entirely — no post-hoc unit removal is needed.
 
 **Stream routing — how ethanol streams reach the shared utilities:**
 
-Streams are identified by explicit name, not by a `sink is None` heuristic. The heuristic was found to over-capture cooling tower evaporation (atmospheric), cooling water circulation streams, and the fermentation vent — none of which should be routed to BT or WWT. Verified by running `solo_ethanol_no_facilities.py` against `solo_ethanol.py` (stock factory) and comparing stream-by-stream.
+Streams are identified by explicit name, not by a `sink is None` heuristic. The heuristic was found to over-capture cooling tower evaporation (atmospheric), cooling water circulation streams, and the fermentation vent — none of which should be routed to BT or WWT. Verified by comparing `systems/cellulosic_ethanol.py` (with `WWT=False`) against the stock `biorefineries.cellulosic` factory stream-by-stream.
 
 Correct routing (matches `cellulosic.create_cellulosic_ethanol_system`):
 
@@ -417,7 +417,7 @@ Correct routing (matches `cellulosic.create_cellulosic_ethanol_system`):
 | `WWT.outs[2]` (RO treated water, ~479,000 kg/hr) | `PWC.ins[0]` directly | See PWC note below |
 | Fermentation vent (`F.vent`) | **unconnected** — atmospheric | Stock system does not burn it in BT |
 | CT evaporation | **unconnected** — atmospheric | |
-| CT blowdown | → PWC via `blowdown_recycle=True` (hardcoded in `ethanol_production.py`) | Not routed to WWT |
+| CT blowdown | → PWC via `blowdown_recycle=True` (hardcoded in `systems/cellulosic_ethanol.py`) | Not routed to WWT |
 
 ```python
 # Explicit stream routing — do NOT use sink=None heuristic
@@ -465,12 +465,12 @@ An earlier version of this code kept `ethanol_system` out of the path and re-sim
 
 Keeping ethanol out of the path was actually wrong from a TEA standpoint: it caused the TEA to omit the ethanol system's CAPEX (~$85M installed) and the ethanol product revenue (~$124M/yr), artificially inflating the MSP by ~$1/kg. It also incorrectly scoped BT to only the RCF subsystem, leaving the ethanol system's ~80 MW of steam demand (M203 MPS, D402/D403/U401 LPS) served by market agents rather than the shared BT. Including `ethanol_system` in the path is the correct approach: BT serves all steam demand as a true integrated CHP, the TEA accounts for all CAPEX and co-product revenue, and the MSP reflects the full integrated biorefinery economics.
 
-**No ordering constraint:** Because `ethanol_production.py` never creates BT or WWT, the IDs `M601`, `WWTC`, `BT` etc. are never claimed by the ethanol system. `create_rcf_utilities_system()` can be called in any order relative to `create_cellulosic_ethanol_system`.
+**No ordering constraint:** Because `systems/cellulosic_ethanol.py` never creates BT or WWT, the IDs `M601`, `WWTC`, `BT` etc. are never claimed by the ethanol system. `create_rcf_utilities_system()` can be called in any order relative to `create_cellulosic_ethanol_system`.
 
-**Full implementation pattern (current `rcf_4_21_2026`):**
+**Full implementation pattern (current `scripts/rcf_etoh.py`):**
 
 ```python
-from lignin_saf.ethanol_production import create_cellulosic_ethanol_system
+from lignin_saf.systems.cellulosic_ethanol import create_cellulosic_ethanol_system
 
 # 1. Create and simulate process subsystems
 rcf_system               = create_rcf_system(ins=poplar_in);  rcf_system.simulate()
@@ -513,26 +513,26 @@ rcf_combined_system.simulate()
 ```
 
 **Notes:**
-- `blowdown_recycle=True` in `ethanol_production.py` matches the stock factory: CT blowdown goes to PWC, not WWT. Setting it to `False` would leave CT blowdown with no sink and does not match the stock system's WWT loading.
+- `blowdown_recycle=True` in `systems/cellulosic_ethanol.py` matches the stock factory: CT blowdown goes to PWC, not WWT. Setting it to `False` would leave CT blowdown with no sink and does not match the stock system's WWT loading.
 - `solids_to_BT` must appear before `BT` in the facilities list so its outlet is populated before BT consumes it.
 - The `strict_moisture_content=False` patch in `create_rcf_utilities_system()` applies to the shared WWT for both RCF and ethanol wastewater streams.
 
-## RCF + ETJ Integrated Biorefinery (`rcf_with_etj.py`)
+## RCF + ETJ Integrated Biorefinery (`scripts/rcf_etoh_etj.py`)
 
 Extends the RCF + cellulosic ethanol assembly (described above) by routing the cellulosic ethanol product through the ETJ catalytic upgrading system rather than selling it. Products: RCF lignin monomers (MSP target), renewable naphtha (RN, C4–C6), sustainable aviation fuel (SAF, C10), and renewable diesel (RD, C18).
 
 ### Chemical set
 
-`ligsaf_chemicals.create_chemicals()` is a strict superset of `etj_chemicals.create_chemicals()` — every ETJ-specific chemical (Ethylene, Butene, Hex-1-ene, Dec-1-ene, Octadec-1-ene, Butane, Hexane, Decane, Octadecane, Syndol, Nickel_SiAl, CobaltMolybdenum, Coal) is already present in the ligsaf chemical set. No separate merged chemical set is needed. `rcf_with_etj.py` calls `bst.settings.set_thermo(ligsaf_chems)` once and it serves both subsystems.
+`ligsaf_chemicals.create_chemicals()` is a strict superset of `etj_chemicals.create_chemicals()` — every ETJ-specific chemical (Ethylene, Butene, Hex-1-ene, Dec-1-ene, Octadec-1-ene, Butane, Hexane, Decane, Octadecane, Syndol, Nickel_SiAl, CobaltMolybdenum, Coal) is already present in the ligsaf chemical set. No separate merged chemical set is needed. `scripts/rcf_etoh_etj.py` calls `bst.settings.set_thermo(ligsaf_chems)` once and it serves both subsystems.
 
 ### Module-level side effects in `etj_no_facilities.py`
 
 Importing `create_etj_system_no_facilities` immediately runs two module-level statements:
 ```python
 bst.F.set_flowsheet('etj')          # switches active flowsheet to 'etj'
-bst.settings.set_thermo(etj_chems)  # sets ETJ-only chemicals — overridden on the next line of rcf_with_etj.py
+bst.settings.set_thermo(etj_chems)  # sets ETJ-only chemicals — overridden on the next line of scripts/rcf_etoh_etj.py
 ```
-`rcf_with_etj.py` calls `bst.settings.set_thermo(ligsaf_chems)` right after the import, overriding the ETJ-only thermo with the complete ligsaf set. The `CEPCI = 800.8` line has been removed from `etj_no_facilities.py`; the combined system uses `CEPCI = 541.7` throughout.
+`scripts/rcf_etoh_etj.py` calls `bst.settings.set_thermo(ligsaf_chems)` right after the import, overriding the ETJ-only thermo with the complete ligsaf set. The `CEPCI = 800.8` line has been removed from `etj_no_facilities.py`; the combined system uses `CEPCI = 541.7` throughout.
 
 **Future clean-up:** guard the two remaining module-level lines with `if ins is None:` so they only fire in standalone mode:
 ```python
@@ -541,11 +541,11 @@ if ins is None:
     bst.settings.set_thermo(etj_chems)
 ```
 
-The `set_flowsheet('etj')` line is still present but not blocking. Because it runs before any units are created in `rcf_with_etj.py`, all RCF, ethanol, and ETJ units are consistently registered in the 'etj' flowsheet. `F` (from `from biosteam import main_flowsheet as F`) aliases this flowsheet, so all `F.xxx` stream and unit lookups work correctly.
+The `set_flowsheet('etj')` line is still present but not blocking. Because it runs before any units are created in `scripts/rcf_etoh_etj.py`, all RCF, ethanol, and ETJ units are consistently registered in the 'etj' flowsheet. `F` (from `from biosteam import main_flowsheet as F`) aliases this flowsheet, so all `F.xxx` stream and unit lookups work correctly.
 
 ### Ethanol feed routing to ETJ
 
-The cellulosic ethanol product exits `T703` (the "Product tank", explicitly named in `ethanol_production.py`). An NH3 splitter guards against trace ammonia before the ETJ feed:
+The cellulosic ethanol product exits `T703` (the "Product tank", explicitly named in `systems/cellulosic_ethanol.py`). An NH3 splitter guards against trace ammonia before the ETJ feed:
 ```python
 nh3_splitter = bst.units.Splitter(ins=F.T703.outs[0], split={'NH3': 1.0})
 # outs[1] = ethanol product (NH3-free) → ETJ feed
@@ -598,7 +598,7 @@ The combined system uses `CEPCI = 541.7` (2016 USD) throughout. The ETJ unit cos
 
 ### Open TEA items
 
-The following ETJ streams require prices in `rcf_with_etj.py` **before calling `integrated_tea.solve_price()`**:
+The following ETJ streams require prices in `scripts/rcf_etoh_etj.py` **before calling `integrated_tea.solve_price()`**:
 
 | Stream | Price to set | Value | Notes |
 |---|---|---|---|
@@ -619,7 +619,7 @@ Without these prices, the TEA computes zero H₂ cost and zero SAF/RN/RD revenue
 
 ## TEA
 
-`rcf_4_21_2026` runs a full TEA using `CellulosicEthanolTEA` from `cellulosic_tea.py` (NREL 2011 methodology, 2016 USD, 10% IRR, 30-year plant life, MACRS7 depreciation for process equipment, MACRS20 for BT).
+`scripts/rcf_etoh.py` runs a full TEA using `CellulosicEthanolTEA` from `cellulosic_tea.py` (NREL 2011 methodology, 2016 USD, 10% IRR, 30-year plant life, MACRS7 depreciation for process equipment, MACRS20 for BT).
 
 **Stream pricing — complete picture:**
 
@@ -631,7 +631,7 @@ Without these prices, the TEA computes zero H₂ cost and zero SAF/RN/RD revenue
 | `EthylAcetate_in` | EtOAc fresh makeup | Inside `create_rcf_oil_purification_system()` — EtOAc only, `price=prices['EthylAcetate']`; water is in separate unpriced `Water_in_etoac` |
 | `Hexane_In` | Hexane fresh makeup | Inside `create_monomer_purification_system()` — hexane only, `price=prices['Hexane']`; water is in separate unpriced `Water_in_hexane` |
 | `RCF_Catalyst` | `catalyst` stream in `CatalystMixer` | `price=prices['NiC_catalyst']` |
-| `Carbohydrate_Pulp` | `F.Carbohydrate_Pulp` | Set in `rcf_4_21_2026` to `prices['Feedstock']` as a conservative co-product credit; only relevant when cellulosic ethanol system is excluded |
+| `Carbohydrate_Pulp` | `F.Carbohydrate_Pulp` | Set in `scripts/rcf_etoh.py` to `prices['Feedstock']` as a conservative co-product credit; only relevant when cellulosic ethanol system is excluded |
 | `RCF_Monomers` | `F.RCF_Monomers` | Not set — left at zero so `tea.solve_price(F.RCF_Monomers)` returns the MSP |
 | WWT/BT utility chemicals | Internal WWT/BT streams | BioSTEAM defaults (H₂SO₄, lime, DAP, boiler chems, etc.) |
 
@@ -653,7 +653,7 @@ Current streams that follow this pattern:
 
 When adding any new solvent makeup stream that co-feeds water, apply this same split. Do not combine priced solvent and free water into a single stream.
 
-**Labor cost** — Seider-based estimate computed in `rcf_4_21_2026`:
+**Labor cost** — Seider-based estimate computed in `scripts/rcf_etoh.py`:
 ```python
 # DWandB = (operators/shift) * shifts * hr/yr * $/hr
 DWandB             = 1 * 3 * 5 * 2080 * 40          # 1 op/section, 3 sections, 5 shifts, $40/hr
@@ -759,105 +759,38 @@ Slots 0–5 are colorblind-friendly (Wong 2011). Add new entries at the end if m
 |---|---|
 | `ligsaf_units.py` | `SolvolysisReactor`, `HydrogenolysisReactor`, `PSA`, `CatalystMixer` class definitions |
 | `ligsaf_settings.py` | All process parameters, reaction conditions, prices, biomass composition, EtOAc and hexane LLE partition data |
-| `ligsaf_system.py` | `create_rcf_system(ins=None)` — Area 200 factory function |
-| `ligsaf_purification_system.py` | `create_rcf_oil_purification_system(ins=None)` — Area 300 EtOAc LLE factory function |
-| `monomer_purification.py` | `create_monomer_purification_system(ins=None)` — Area 300 hexane LLE monomer/dimer separation factory function |
-| `ethanol_production.py` | `create_cellulosic_ethanol_system(ins=None, add_denaturant=True)` — single factory covering both use cases. `WWT=False, CHP=False` always; pass `add_denaturant=False` when ethanol routes to ETJ instead of being sold as fuel-grade ethanol (sets `M701.denaturant_fraction=0.0`). |
-| `ligsaf_utilities_system.py` | `create_rcf_utilities_system()` — Area 400 + 500; returns `(BT, WWT, gas_mixer)` |
 | `ligsaf_chemicals.py` | Chemical property definitions for the RCF system |
 | `ligsaf_plots.py` | Reusable figure-generation functions: `plot_installed_cost_breakdown`, `plot_operating_cost_breakdown` |
 | `cellulosic_tea.py` | `CellulosicEthanolTEA` class used for integrated system TEA |
-| `rcf_purification.py` | Entry-point script: builds and simulates the combined system (Areas 200–500) |
-| `rcf_with_etj.py` | Entry-point script for the fully integrated RCF + cellulosic ethanol + ETJ biorefinery. Poplar → RCF lignin monomers co-produced with SAF/RN/RD from ETJ upgrading of cellulosic ethanol. Uses `ethanol_production.create_cellulosic_ethanol_system(add_denaturant=False)` so all ethanol routes to ETJ. Shared utilities (BT, WWT) serve all three areas. See "RCF + ETJ Integrated Biorefinery" section for integration details and open TEA items. |
-| `rcf.py` | RCF-specific helper functions |
+| `systems/rcf.py` | `create_rcf_system(ins=None)` — Area 200 factory function |
+| `systems/rcf_oil_purification.py` | `create_rcf_oil_purification_system(ins=None)` — Area 300 EtOAc LLE factory function |
+| `systems/monomer_purification.py` | `create_monomer_purification_system(ins=None)` — Area 300 hexane LLE monomer/dimer separation factory function |
+| `systems/cellulosic_ethanol.py` | `create_cellulosic_ethanol_system(ins=None, add_denaturant=True)` — single factory covering both use cases. `WWT=False, CHP=False` always; pass `add_denaturant=False` when ethanol routes to ETJ instead of being sold as fuel-grade ethanol (sets `M701.denaturant_fraction=0.0`). |
+| `systems/ligsaf_utilities.py` | `create_rcf_utilities_system()` — Area 400 + 500; returns `(BT, WWT, gas_mixer)` |
+| `scripts/rcf_etoh.py` | Entry-point script: builds and simulates the full integrated system (RCF + ethanol) |
+| `scripts/rcf_etoh_etj.py` | Entry-point script for the fully integrated RCF + cellulosic ethanol + ETJ biorefinery. Poplar → RCF lignin monomers co-produced with SAF/RN/RD from ETJ upgrading of cellulosic ethanol. Uses `systems/cellulosic_ethanol.create_cellulosic_ethanol_system(add_denaturant=False)` so all ethanol routes to ETJ. Shared utilities (BT, WWT) serve all three areas. See "RCF + ETJ Integrated Biorefinery" section for integration details and open TEA items. |
 
-## Repo Structure Plan (incremental clean-up)
+## Repo Clean-up Status
 
-The goal is a structure where library code and entry-point scripts are cleanly separated, and variant behaviour is expressed through function parameters rather than duplicate files. Apply incrementally — each step is independent and reversible.
+### DONE
 
-### Guiding principles
+- **Merged duplicate ethanol factories** — `ethanol_production_no_denaturant.py` deleted; `systems/cellulosic_ethanol.py` accepts `add_denaturant=True/False`.
+- **Deleted legacy/scratch files** — `combined_trial_1/2.py`, `cellulosic_ethanol_legacy.py`, `solo_ethanol.py`, `solo_ethanol_no_facilities.py`, `rcf_purification.py` all removed.
+- **Moved entry-point scripts to `scripts/`** — `scripts/rcf_etoh.py` and `scripts/rcf_etoh_etj.py`.
+- **Moved factory functions to `systems/`** — all five factory files now live under `lignin_saf/systems/`.
 
-1. **One factory, bool parameters** — never duplicate a file to change one line. Express variants as keyword arguments (`add_denaturant`, `facilities`, etc.).
-2. **Library vs. scripts** — factory functions and unit classes belong in the package; scripts that run a simulation belong in a top-level `scripts/` folder.
-3. **Drop the `ligsaf_` prefix** inside `lignin_saf/` — it's redundant once you're inside the package. Rename on import update, not before.
-4. **Delete obsolete files** — legacy/trial files accumulate silently; delete them as soon as they have no remaining callers.
+### TODO
 
-### Step 1 — DONE: merge duplicate ethanol factories
+- **Merge `etj_system.py` and `etj_no_facilities.py`** (`atj_saf/atj_bst/`) into one factory with a `facilities=True` bool parameter. The two module-level side effects in `etj_no_facilities.py` (`set_flowsheet`, `set_thermo`) should be guarded or removed so importing the merged file has no side effects.
 
-`ethanol_production_no_denaturant.py` deleted. `ethanol_production.py` now accepts `add_denaturant=True` (default). Callers updated:
-
-| Caller | Change |
-|---|---|
-| `rcf_4_21_2026` | unchanged — uses default `add_denaturant=True` |
-| `rcf_with_etj.py` | `add_denaturant=False` added to factory call |
-| `ligsaf_testing_notebook.ipynb` | cells that imported `ethanol_production_no_denaturant` need manual update |
-
-### Step 2 — TODO: merge `etj_system.py` and `etj_no_facilities.py`
-
-Same pattern: one factory, one bool parameter.
-
-```python
-# atj_saf/atj_bst/system.py (merged)
-def create_etj_system(ins=None, req_saf=9, facilities=True):
-    ...
-    if facilities:
-        WWT = bst.create_conventional_wastewater_treatment_system(...)
-        BT  = bst.facilities.BoilerTurbogenerator(...)
-        etj_sys = bst.System('atj_sys', path=(...), facilities=[WWT, BT], recycle=...)
-    else:
-        # collect WW in ETJ_WW_MIX / H602; caller wires into shared WWT
-        etj_sys = bst.System('atj_sys', path=(...), recycle=...)
-    return etj_sys
-```
-
-Callers: `etj_run.py` → `create_etj_system()` (default `facilities=True`); `rcf_with_etj.py` → `create_etj_system(ins=..., facilities=False)`.
-
-**Note:** the two module-level side effects in `etj_no_facilities.py` (`set_flowsheet`, `set_thermo`) should be guarded inside the function or removed once the files are merged, so importing the merged file has no side effects.
-
-### Step 3 — TODO: delete scratch and legacy files
-
-Files with no remaining callers that should be deleted:
-
-| File | Reason |
-|---|---|
-| `lignin_saf/combined_trial_1.py` | Superseded by `rcf_4_21_2026` and `rcf_with_etj.py` |
-| `lignin_saf/combined_trial_2.py` | Same |
-| `lignin_saf/cellulosic_ethanol_legacy.py` | Reference script; intent captured in CLAUDE.md |
-| `lignin_saf/solo_ethanol.py` | Used only for stream routing verification; intent captured in CLAUDE.md |
-| `lignin_saf/solo_ethanol_no_facilities.py` | Same |
-| `lignin_saf/rcf_purification.py` | Superseded by `rcf_4_21_2026` |
-| `lignin_saf/ligsaf_abstract_tea.py` + `ligsaf_tea.py` | Check if `cellulosic_tea.py` covers all callers first |
-| `atj_saf/atj_bst/etj_legacy.py` | Legacy; superseded by `etj_system.py` |
-| `atj_saf/atj_bst/plot_codes.py` | Check if superseded by individual plot files |
-
-Before deleting any file, grep for callers: `grep -r "filename" . --include="*.py" --include="*.ipynb"`.
-
-### Step 4 — TODO: move entry-point scripts to `scripts/`
-
-Create a top-level `scripts/` folder and move the run scripts out of the library packages:
-
-```
-scripts/
-    run_rcf.py          ← lignin_saf/rcf_4_21_2026  (rename + move)
-    run_rcf_etj.py      ← lignin_saf/rcf_with_etj.py (move)
-    run_etj.py          ← atj_saf/atj_bst/etj_run.py (move)
-```
-
-Update imports in moved scripts from `from lignin_saf.xxx import` (already absolute — no change needed as long as the package is installed with `pip install -e .`).
-
-### Step 5 — TODO: rename `ligsaf_` prefixed files (optional, low priority)
-
-Only worthwhile if sharing the repo publicly. Rename inside `lignin_saf/`:
+- **Strip `ligsaf_` prefix from support files** (optional, low priority — only worthwhile before public release):
 
 | Current name | Target name |
 |---|---|
 | `ligsaf_chemicals.py` | `chemicals.py` |
 | `ligsaf_settings.py` | `settings.py` |
 | `ligsaf_units.py` | `units.py` |
-| `ligsaf_system.py` | `systems/rcf.py` |
-| `ligsaf_purification_system.py` | `systems/purification.py` (merge with `monomer_purification.py`) |
-| `ligsaf_utilities_system.py` | `systems/utilities.py` |
 | `ligsaf_plots.py` | `plots.py` |
 | `cellulosic_tea.py` | `tea.py` |
 
-Requires updating all imports across the repo. Do last, after the other steps, so imports only need updating once.
+Requires updating all imports across the repo.
