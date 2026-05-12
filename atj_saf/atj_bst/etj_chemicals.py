@@ -31,11 +31,12 @@ def create_chemicals():
 
 
 
-   
-    # 4) Extend the base collection
-    etj_chems.extend([ethylene, butene, hexene, decene, octene, butane, hexane,
-                      octane, decane, octadecane, hydrogen, syndol,
-                        ni_sial, co_mo, coal ])
+    # 4) Extend the base collection — filter out any chemicals already present in the
+    # cellulosic base set (e.g. Octane is included in newer biorefineries versions)
+    candidates = [ethylene, butene, hexene, decene, octene, butane, hexane,
+                  octane, decane, octadecane, hydrogen, syndol, ni_sial, co_mo, coal]
+    existing_ids = {c.ID for c in etj_chems}
+    etj_chems.extend([c for c in candidates if c.ID not in existing_ids])
 
     etj_chems.compile()  # Compiling all the chemicals to one string
     return etj_chems

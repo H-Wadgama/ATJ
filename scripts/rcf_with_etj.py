@@ -7,7 +7,7 @@ from lignin_saf.systems.rcf_oil_purification import create_rcf_oil_purification_
 from lignin_saf.systems.monomer_purification import create_monomer_purification_system
 from lignin_saf.systems.ligsaf_utilities import create_rcf_utilities_system
 from lignin_saf.systems.cellulosic_ethanol import create_cellulosic_ethanol_system
-from cellulosic_tea import create_cellulosic_ethanol_tea
+from lignin_saf.cellulosic_tea import create_cellulosic_ethanol_tea
 from atj_saf.atj_bst.etj_no_facilities import create_etj_system_no_facilities
 
 from biosteam import main_flowsheet as F

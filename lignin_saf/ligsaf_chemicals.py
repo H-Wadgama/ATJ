@@ -128,10 +128,14 @@ def create_chemicals():
     )
 
 
-    # 4) Extend the base collection
-    ligsaf_chems.extend([methanol, hydrogen, methane, hexane, ethyl_acetate, ethylene, butene, hexene, decene, octene, butane, octane, decane, octadecane,
-                         syndol, ni_sial, co_mo, coal, NiC, activated_carbon, propylguaiacol, propylsyringol,syringaresinol,g_dimer,
-                  s_oligomer, g_oligomer])
+    # 4) Extend the base collection — filter out any chemicals already present in the
+    # cellulosic base set (e.g. Octane is included in newer biorefineries versions)
+    candidates = [methanol, hydrogen, methane, hexane, ethyl_acetate, ethylene, butene, hexene,
+                  decene, octene, butane, octane, decane, octadecane,
+                  syndol, ni_sial, co_mo, coal, NiC, activated_carbon,
+                  propylguaiacol, propylsyringol, syringaresinol, g_dimer, s_oligomer, g_oligomer]
+    existing_ids = {c.ID for c in ligsaf_chems}
+    ligsaf_chems.extend([c for c in candidates if c.ID not in existing_ids])
 
     ligsaf_chems.compile()  # Compiling all the chemicals to one string
     return ligsaf_chems
