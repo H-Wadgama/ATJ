@@ -20,7 +20,6 @@ def create_chemicals():
     decene = tmo.Chemical('Dec-1-ene')       # Decene is representative for SAF
     octene = tmo.Chemical('Octadec-1-ene')   # Octadecene is representative for renewable diesel
     butane = tmo.Chemical('Butane')
-    octane = tmo.Chemical('Octane')
     decane = tmo.Chemical('Decane')
     octadecane = tmo.Chemical('Octadecane')  
 
@@ -131,7 +130,7 @@ def create_chemicals():
     # 4) Extend the base collection — filter out any chemicals already present in the
     # cellulosic base set (e.g. Octane is included in newer biorefineries versions)
     candidates = [methanol, hydrogen, methane, hexane, ethyl_acetate, ethylene, butene, hexene,
-                  decene, octene, butane, octane, decane, octadecane,
+                  decene, octene, butane, decane, octadecane,
                   syndol, ni_sial, co_mo, coal, NiC, activated_carbon,
                   propylguaiacol, propylsyringol, syringaresinol, g_dimer, s_oligomer, g_oligomer]
     existing_ids = {c.ID for c in ligsaf_chems}
