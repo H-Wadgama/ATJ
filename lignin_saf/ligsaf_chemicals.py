@@ -18,6 +18,10 @@ def create_chemicals():
     methane = tmo.Chemical('Methane')
     hexane = tmo.Chemical('Hexane')
     ethyl_acetate = tmo.Chemical('EthylAcetate')
+    propyl_cyclohexane = tmo.Chemical('propylcyclohexane')   # HDO product
+
+
+
     ethylene = tmo.Chemical('Ethylene')
     butene = tmo.Chemical('Butene')         
     hexene = tmo.Chemical('Hex-1-ene')  
@@ -26,6 +30,8 @@ def create_chemicals():
     butane = tmo.Chemical('Butane')         # Renewable naphtha surrogate [1], along with hexane
     decane = tmo.Chemical('Decane')         # SAF surrogate (Jet-A range: C8-C16) [1, 2]
     octadecane = tmo.Chemical('Octadecane') # Renewable diesel surrogate 
+
+
 
     activated_carbon = tmo.Chemical('ActivatedCarbon', search_db=False, default=True, phase='s')
     NiC = tmo.Chemical('NiC', search_db=False, default = True, phase = 's')
@@ -133,7 +139,7 @@ def create_chemicals():
 
     # 4) Extend the base collection — filter out any chemicals already present in the
     # cellulosic base set (e.g. Octane is included in newer biorefineries versions)
-    candidates = [methanol, hydrogen, methane, hexane, ethyl_acetate, ethylene, butene, hexene,
+    candidates = [methanol, hydrogen, methane, hexane, ethyl_acetate, propyl_cyclohexane, ethylene, butene, hexene,
                   decene, octene, butane, decane, octadecane,
                   syndol, ni_sial, co_mo, coal, NiC, activated_carbon,
                   propylguaiacol, propylsyringol, syringaresinol, g_dimer, s_oligomer, g_oligomer]
