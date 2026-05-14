@@ -74,6 +74,30 @@ rcf_oil_yield = {
 
 condensation_extent = 0.136
 
+# Conditions for the Hydrodeoxygenation reaction to produce cycloalkanes from the monomers by ring hydrogenation + aryl bond cleavaage
+hdo_rxn = {
+    'T' : 573.15,        # [C] 300 C from [1][2][5]
+    'P': 5e6,            # [Pa] 5 MPa from [1][2][5]
+    'tau' : 5,           # [hr] Total 5 hr reaction time [1][2]
+    'tau_0' : 1,         # [hr] Assumed time required to cool down the reactor
+    'free_frac' : 0.1,   # [%] 10% kept free for gas disengagement / headspace
+    'V_max' : 600,       # [m3] Assumed, as was maximum volume in [4]
+    'aspect_ratio' : 5,  # Assumed
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 ##### Conversion factors ########
