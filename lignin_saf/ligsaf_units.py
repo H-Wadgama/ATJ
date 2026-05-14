@@ -1228,7 +1228,7 @@ class HydrodeoxygenationReactor(bst.Unit, bst.units.design_tools.PressureVessel)
 
         duty = -70 * self.ins[0].imol['Hydrogen'] * 1000  # Aromatic hydrogenation has duty between 58-70 kJ/mol H2 according to https://www.nature.com/articles/s41563-024-02024-6
 
-        self.add_heat_utility(duty/N_total, self.T)
+        self.add_heat_utility(duty/N_total, self.T, agent = bst.HeatUtility.get_cooling_agent('chilled_water'))   # BioSTEAM defaulted to cooling water but chilled water more probable since reaction is very exothermic 
         self.set_design_result('Duty', 'kJ/hr', duty)
 
 
