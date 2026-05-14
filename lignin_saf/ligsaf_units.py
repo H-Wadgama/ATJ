@@ -1026,6 +1026,15 @@ class CatalystMixer(bst.Unit):
 from lignin_saf.ligsaf_settings import hdo_params
  
 
+import biosteam as bst, numpy as np
+from math import ceil
+
+from typing import Optional
+from biosteam.units.design_tools import (
+    PressureVessel, 
+)
+ 
+
 class HydrodeoxygenationReactor(bst.Unit, bst.units.design_tools.PressureVessel):
 
     """
@@ -1069,8 +1078,8 @@ class HydrodeoxygenationReactor(bst.Unit, bst.units.design_tools.PressureVessel)
                      'Vertical pressure vessel': 4.16,
                      'Platform and ladders': 1.}                   
 
-    _N_ins = 1
-    _N_outs = 1
+    _N_ins = 2
+    _N_outs = 2
     
     _units = {**PressureVessel._units,
               'Batch time': 'hr',
@@ -1169,14 +1178,18 @@ class HydrodeoxygenationReactor(bst.Unit, bst.units.design_tools.PressureVessel)
 
         
     def _run(self):
-        inf, = self.ins
-        eff, = self.outs
+        inf, catalyst_in = self.ins
+        eff, catalyst_out = self.outs
 
-        eff.mix_from(self.ins)
+        eff.copy_like(inf)
         self.reaction(eff)
 
         eff.imass['l', 'Dodecane'] = eff.imass['l', 'Dodecane']*(1-hdo_params['solvent_decomp']) # 0.5% dodecane lost due to decomposition
+        eff.imass['g', 'Dodecane'] = eff.imass['g', 'Dodecane']*(1-hdo_params['solvent_decomp']) # 0.5% dodecane lost due to decomposition
 
+
+        catalyst_out.copy_like(catalyst_in)
+        
         eff.P = self.P                                             # Assuming no P drop sinnce its a batch reactor
         eff.T = self.T                                             # Assuming isothermal operation
     
@@ -1240,18 +1253,5 @@ class HydrodeoxygenationReactor(bst.Unit, bst.units.design_tools.PressureVessel)
 
         
        
-        """
-        ---------
-          
-        Parameters that can be further fine-tuned based on industry/national lab data
-        - Void fraction of poplar bed: Herein assumed 0.5, this is subject to change
-        - Working volue fraction: Herein assumed 80%, but can change depending on how well mass transfer occurs in real reactors
-        - V_max: Maximum volume of a single reactor, herein assumed as 600 m3 based on Bartling et al 2021 paper, but subject to change
-        - residence time: Herein 2 hrs, but could change based on which regime is more limiting. 
-
-
-        ----------
-
-        """
-
+    
     

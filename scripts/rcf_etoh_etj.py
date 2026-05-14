@@ -113,3 +113,6 @@ integrated_tea = create_cellulosic_ethanol_tea(rcf_combined_system)
 integrated_tea.labor_cost = labor
 
 print(f'The MSP for RCF monomers is  {round(integrated_tea.solve_price(F.RCF_Monomers), 3)} USD/kg')
+
+
+rcf_combined_system.diagram('rcf_etoh_etj.png', format = 'png')

@@ -33,6 +33,8 @@ def create_chemicals():
 
 
     dodecane = tmo.Chemical('Dodecane')     # HDO solvent
+    Ni2PSiO2 = tmo.Chemical('Ni2PSiO2', search_db = False, default = True, phase = 's')
+    Ni2PSiO2.synonyms = ('Hydrodeoxygenation_Catalyst')
 
 
     activated_carbon = tmo.Chemical('ActivatedCarbon', search_db=False, default=True, phase='s')
@@ -142,7 +144,7 @@ def create_chemicals():
     # 4) Extend the base collection — filter out any chemicals already present in the
     # cellulosic base set (e.g. Octane is included in newer biorefineries versions)
     candidates = [methanol, hydrogen, methane, hexane, ethyl_acetate, propyl_cyclohexane, ethylene, butene, hexene,
-                  decene, octene, butane, decane, octadecane, dodecane,
+                  decene, octene, butane, decane, octadecane, dodecane, Ni2PSiO2,
                   syndol, ni_sial, co_mo, coal, NiC, activated_carbon,
                   propylguaiacol, propylsyringol, syringaresinol, g_dimer, s_oligomer, g_oligomer]
     existing_ids = {c.ID for c in ligsaf_chems}

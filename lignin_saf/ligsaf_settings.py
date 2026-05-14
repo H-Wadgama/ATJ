@@ -86,7 +86,8 @@ hdo_params = {
     'V_max' : 600,       # [m3] Assumed, as was maximum volume in [4]
     'aspect_ratio' : 5,  # Assumed
     'solvent_decomp' : 0.05,
-    'solvent_req' : 0.04    # [m3/kg] From [1]
+    'solvent_req' : 0.04,    # [m3/kg] From [1]
+    'catalyst_req' : 0.8
 }
 
 

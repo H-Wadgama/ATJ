@@ -75,6 +75,11 @@ dodecane_flow = F.RCF_Monomers.F_mass * dodcane_required
 solvent_stream = bst.Stream(ID = 'Dodecane_In', Dodecane = dodecane_flow, units = 'm3/hr', P = 101325, T = 300, phase = 'l')
 
 
+catalyst_required = hdo_params['catalyst_req']      # kg/kg of lignin oil
+catalyst_flow = F.RCF_Monomers.F_mass * catalyst_required
+catalyst_stream =  bst.Stream(ID = 'HDO_Catalyst_In', Ni2PSiO2 = catalyst_flow, units = 'kg/hr', phase = 's')
+
+
 mixer = bst.units.Mixer(ins = (h2_in, F.RCF_Monomers, solvent_stream), rigorous = True)
 mixer.simulate()
 
@@ -86,7 +91,7 @@ heater = bst.units.HXutility(ins = compressor-0, T = hdo_params['T'], rigorous= 
 heater.simulate()
 
 
-HDO = HydrodeoxygenationReactor(ins = compressor-0, 
+HDO = HydrodeoxygenationReactor(ins = (compressor-0, catalyst_stream),
                                 T = hdo_params['T'],
                                 P = hdo_params['P'],
                                 tau = hdo_params['tau'],
