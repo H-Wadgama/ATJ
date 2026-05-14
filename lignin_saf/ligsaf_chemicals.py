@@ -32,6 +32,8 @@ def create_chemicals():
     octadecane = tmo.Chemical('Octadecane') # Renewable diesel surrogate 
 
 
+    dodecane = tmo.Chemical('Dodecane')     # HDO solvent
+
 
     activated_carbon = tmo.Chemical('ActivatedCarbon', search_db=False, default=True, phase='s')
     NiC = tmo.Chemical('NiC', search_db=False, default = True, phase = 's')
@@ -140,7 +142,7 @@ def create_chemicals():
     # 4) Extend the base collection — filter out any chemicals already present in the
     # cellulosic base set (e.g. Octane is included in newer biorefineries versions)
     candidates = [methanol, hydrogen, methane, hexane, ethyl_acetate, propyl_cyclohexane, ethylene, butene, hexene,
-                  decene, octene, butane, decane, octadecane,
+                  decene, octene, butane, decane, octadecane, dodecane,
                   syndol, ni_sial, co_mo, coal, NiC, activated_carbon,
                   propylguaiacol, propylsyringol, syringaresinol, g_dimer, s_oligomer, g_oligomer]
     existing_ids = {c.ID for c in ligsaf_chems}
