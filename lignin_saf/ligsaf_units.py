@@ -1023,3 +1023,235 @@ class CatalystMixer(bst.Unit):
         
 
         
+from lignin_saf.ligsaf_settings import hdo_params
+ 
+
+class HydrodeoxygenationReactor(bst.Unit, bst.units.design_tools.PressureVessel):
+
+    """
+    Batch reactor for HDO of lignin oil
+    Designed to process RCF monomers only right now, but functionality for dimers needs to be added
+
+    Reaction based on ring hydrogenation + aryl bond cleavage to produce cycloalkanes
+    Alternative reaction scheme, where aromatic ring of monomers is preserved and just the aryl bond is cleaved (CBI) might be considered later
+
+    Duty estimated based on ring hydrogenation enthalpy stated in [3]. Could be refined 
+
+    All reaction conditions are typically cited from [1],[2] unless noted otherwise   
+
+    Maximum volume is capped at 600 m3 [4], and number of reactors is scaled accordingly. Hence the reactors are technically oversized
+
+    
+    References
+    ----------------------------------------------------------------------------------
+        [1] Bruno Pandalone et al.,
+        "Optimum Lignin Oil - Finding the Most Suitable Feedstock to Replace Cycloalkanes in Sustainable Aviation Fuel (SAF)"
+        ChemSusChem. 2025. 18(11). https://doi.org/10.1002/cssc.202402531
+        [2] Bruno Pandalone et al.,
+        "Molecule-to-molecule conversion of RCF lignin oil to sustainable aviation fuel"
+        Chem Circularity. 2026. https://doi.org/10.1016/j.checir.2026.100025
+        [3] Matthew S. Webber et al., 
+        " Lignin deoxygenation for the production of sustainable aviation fuel blendstocks"
+        Nature Materials. 2024. 23, 1622-1638. https://doi.org/10.1038/s41563-024-02024-6
+        [4] Andrew W. Bartling, et al.,
+        "Techno-economic analysis and life cycle assessment of a biorefinery utilizing reductive catalytic fractionation." 
+        Energy & Environmental Science. 2021. 4147-4168. https://doi.org/10.1039/D1EE01642C
+        [5] Zhengwen Cao et al.,
+        "A Convergent Approach for a Deep Converting Lignin-First Biorefinery Rendering High-Energy-Density Drop-in Fuels."
+        Joule. 2018. 2(6). https://doi.org/10.1016/j.joule.2018.03.012
+    -----------------------------------------------------------------------------------
+
+    """
+
+
+
+    _F_BM_default = {'Horizontal pressure vessel': 3.05,
+                     'Vertical pressure vessel': 4.16,
+                     'Platform and ladders': 1.}                   
+
+    _N_ins = 1
+    _N_outs = 1
+    
+    _units = {**PressureVessel._units,
+              'Batch time': 'hr',
+              'Turnaround time': 'hr',
+              'Time on stream': 'hr',
+              'Total beds': "",
+              'Beds in service': "",
+              'Total volume': 'm3',
+              'Reactor volume': 'm3',
+              'Duty' : 'kJ/hr'}
+    
+
+
+    # Default operating temperature [K]
+    T_default: float = 573.15                       # 300 C from [1][2][5]
+
+    #: Default operating pressure [Pa]
+    P_default:  float = 5e6                         # 5 MPa from [1][2][5]
+    
+    #: Default reaction time [hr]
+    tau_default: float = 5                          # Total 5 hr reaction time [1][2]
+
+    #: Default cleaning and unloading time (hr).
+    tau_0_default: float  = 1                       # Assumed time required to cool down the reactor 
+
+    # Fixed bed configuration
+    N_total_default: int =  3                       # Total beds (2 operating + 1 cleaning)
+
+    N_working_default: int = 2                      # Beds operating at any time
+
+    # Default free-space fraction of reactor volume
+    free_frac_default: float = 0.10                 # 10% kept free for gas disengagement / headspace
+    
+    # Default maximum vessel volume [m3]
+    V_max_default: float = 600                     # Assumed, as was maximum volume in [4]
+
+    # Aspect ratio (L/D of the reactor)
+    aspect_ratio: float = 5.0                      # Assumed
+
+
+
+    def _init(
+            self,
+            T: Optional[float] = None,
+            P: Optional[float] = None,
+            tau: Optional[float] = None,
+            vessel_material: Optional[str] = None,
+            vessel_type: Optional[str] = None,
+            tau_0: Optional[float] = None,
+            free_frac: Optional[float] = None,
+            V_max: Optional[float] = None,
+            aspect_ratio: Optional[float] = None,
+            *,
+            reaction_1            
+            ):
+
+
+        self.T = self.T_default if T is None else T
+        self.P = self.P_default if P is None else P
+        self.tau = self.tau_default if tau is None else tau
+        self.vessel_material = 'Stainless steel 316' if vessel_material is None else vessel_material
+        self.vessel_type = 'Vertical' if vessel_type is None else vessel_type
+        self.tau_0 = self.tau_0_default if tau_0 is None else tau_0
+        self.free_frac      = self.free_frac_default      if free_frac      is None else free_frac
+        self.V_max = self.V_max_default if V_max is None else V_max
+        self.aspect_ratio          = self.aspect_ratio         if aspect_ratio          is None else aspect_ratio
+        self.reaction = reaction_1
+        # heat_exchanger_1 = self.auxiliary('heat_exchanger_1', bst.HXutility, pump_1.outs[0])
+
+
+
+
+
+
+    def _size_bed(self):
+
+        cycle_time        = self.tau + self.tau_0                  
+
+        # Total monomer flow
+        total_monomer_flow = self.ins[0].F_vol                      # [m3/hr]
+
+        V_theoretical = total_monomer_flow * self.tau               # [m3] Theoretical volume required
+        
+        V_actual = V_theoretical*(1+self.free_frac)                 # [m3] Actual volume required based on free fraction
+        
+        N_working = ceil(V_actual/self.V_max)                       # Number of working reactors based off maximum volume
+        N_offline = ceil(N_working*(self.tau_0/cycle_time))         # Number of offline beds, calculated based off cleaning time and the total cycle time, rounded off to the next number
+        N_total = N_working + N_offline                             # Total beds required
+        V_total = N_total * self.V_max                              # Total volume required
+        
+        diameter = ((4*self.V_max)/(self.aspect_ratio*np.pi))**(1/3)
+        length = self.aspect_ratio * diameter
+
+
+        return length, diameter, N_total, N_working, V_total
+
+        
+    def _run(self):
+        inf, = self.ins
+        eff, = self.outs
+
+        eff.mix_from(self.ins)
+        self.reaction(eff)
+
+        eff.imass['l', 'Dodecane'] = eff.imass['l', 'Dodecane']*(1-hdo_params['solvent_decomp']) # 0.5% dodecane lost due to decomposition
+
+        eff.P = self.P                                             # Assuming no P drop sinnce its a batch reactor
+        eff.T = self.T                                             # Assuming isothermal operation
+    
+        
+
+    def _design(self):
+        length, diameter, N_total, N_working, V_total = self._size_bed()   # Calling size bed function to determine diameter and length 
+        
+        cycle_time = self.tau + self.tau_0
+        self.set_design_result('Diameter', 'ft', diameter)
+        self.set_design_result('Length', 'ft', length)
+        self.set_design_result('Reactor volume', 'm3', self.V_max)
+        self.set_design_result('Total volume', 'm3', V_total)
+        self.set_design_result('Total beds', '', N_total)
+        self.set_design_result('Beds in service', '', N_working)
+        self.set_design_result('Time on stream', 'hr', self.tau)
+        self.set_design_result('Turnaround time', 'hr', self.tau_0)
+        self.set_design_result('Batch time', 'hr', cycle_time)
+
+
+        
+        
+        # Calculates weight based off pressure, diameter and length
+        # Adds vessel type wall thickness, vessel weight, diameter and length to dictionary
+        # But diameter and length are already there because of set_design_result above
+        
+        self.design_results.update(
+            self._vertical_vessel_design(    
+                self.P*(1/6894.76),
+                self.design_results['Diameter']*3.28084,
+                self.design_results['Length']*3.28084
+            )
+        )
+        
+                            
+
+        duty = -70 * self.ins[0].imol['Hydrogen'] * 1000  # Aromatic hydrogenation has duty between 58-70 kJ/mol H2 according to https://www.nature.com/articles/s41563-024-02024-6
+
+        self.add_heat_utility(duty/N_total, self.T)
+        self.set_design_result('Duty', 'kJ/hr', duty)
+
+
+
+
+
+    def _cost(self):
+        design = self.design_results # Calling the dictionary used to store design results in design method above 
+
+        baseline_purchase_costs = self.baseline_purchase_costs # Dictionary for storing baseline costs
+
+        weight = design['Weight']  # weight parameter stores the value from the 'Weight' key in the design dictionnary
+        
+        N_reactors = design['Total beds']
+        # Calculates the baseline purchase cost based off diameter length and weight
+        baseline_purchase_costs.update( 
+            self._vessel_purchase_cost(weight, design['Diameter'], design['Length'])
+        )
+
+        self.parallel['self'] = N_reactors # Used to create multiple of the same beds
+
+
+        
+       
+        """
+        ---------
+          
+        Parameters that can be further fine-tuned based on industry/national lab data
+        - Void fraction of poplar bed: Herein assumed 0.5, this is subject to change
+        - Working volue fraction: Herein assumed 80%, but can change depending on how well mass transfer occurs in real reactors
+        - V_max: Maximum volume of a single reactor, herein assumed as 600 m3 based on Bartling et al 2021 paper, but subject to change
+        - residence time: Herein 2 hrs, but could change based on which regime is more limiting. 
+
+
+        ----------
+
+        """
+
+    

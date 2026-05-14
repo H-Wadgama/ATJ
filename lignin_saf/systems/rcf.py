@@ -5,7 +5,7 @@ from lignin_saf.ligsaf_settings import (
     rcf_oil_yield, prices, feed_parameters, rcf_conditions,
     solvolysis_parameters, meoh_h2o, h2_biomass_ratio, RCF_catalyst,
     poplar_density, free_frac,
-    V_max_limit, condensation_extent
+    V_max_limit, condensation_extent, h2_pressure
 )
 
 
@@ -64,7 +64,7 @@ def create_rcf_system(ins=None):
                              Hydrogen=h2_biomass_ratio * 2e6,
                              units='kg/day',
                              T=80 + 273.15,   # 80°C PEM electrolyzer outlet
-                             P=3e6,           # 30 bar PEM electrolyzer outlet
+                             P=h2_pressure,           # 30 bar PEM electrolyzer outlet
                              phase='g',
                              price = prices['Hydrogen'])
 

@@ -34,6 +34,8 @@ V_max_limit = 600                  # [m³]
 
 
 h2_consumption = 0.01241           # h2 consumption per kg dry biomass feed. Roughly 0.02958 kg H2 consumed per kg RCF oil, I just back calculated it in terms of dry biomass feed so I can use it as an input parameter
+h2_pressure = 3e6                   # [Pa] 30 bar hydrogen outlet pressure from PEM electrolysis
+
 
 solvolysis_parameters = {
     'Cellulose_retention' : 0.9,    # [%] 90% cellulose retained in biomass pulp after RCF
@@ -75,7 +77,7 @@ rcf_oil_yield = {
 condensation_extent = 0.136
 
 # Conditions for the Hydrodeoxygenation reaction to produce cycloalkanes from the monomers by ring hydrogenation + aryl bond cleavaage
-hdo_rxn = {
+hdo_params = {
     'T' : 573.15,        # [C] 300 C from [1][2][5]
     'P': 5e6,            # [Pa] 5 MPa from [1][2][5]
     'tau' : 5,           # [hr] Total 5 hr reaction time [1][2]
@@ -83,8 +85,9 @@ hdo_rxn = {
     'free_frac' : 0.1,   # [%] 10% kept free for gas disengagement / headspace
     'V_max' : 600,       # [m3] Assumed, as was maximum volume in [4]
     'aspect_ratio' : 5,  # Assumed
+    'solvent_decomp' : 0.05,
+    'solvent_req' : 0.04    # [m3/kg] From [1]
 }
-
 
 
 

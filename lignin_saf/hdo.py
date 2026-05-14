@@ -1,17 +1,19 @@
     
-import biosteam as bst
 from biosteam import main_flowsheet as F
+import biosteam as bst
 import thermosteam as tmo
 import pandas as pd
 import numpy as np
 
-from lignin_saf.ligsaf_chemicals import create_chemicals
+
 from lignin_saf.ligsaf_chemicals import create_chemicals
 from lignin_saf.ligsaf_settings import feed_parameters, prices
 from lignin_saf.systems.rcf import create_rcf_system
 from lignin_saf.systems.rcf_oil_purification import create_rcf_oil_purification_system
 from lignin_saf.systems.monomer_purification import create_monomer_purification_system
 from lignin_saf.systems.ligsaf_utilities import create_rcf_utilities_system
+from lignin_saf.ligsaf_settings import hdo_params, h2_pressure
+from lignin_saf.ligsaf_units import HydrodeoxygenationReactor
 
 
 
@@ -56,6 +58,7 @@ rcf_combined_system.show()
 
 
 
+# Hydrodeoxygenation reactions
 
 hydrodeoxygenation_rxn = bst.ParallelReaction([
     bst.Reaction('Propylguaiacol,l + 6Hydrogen,g -> 1propylcyclohexane,l + 2Water,l + Methane,g', reactant='Propylguaiacol', phases='lg',
@@ -64,15 +67,33 @@ hydrodeoxygenation_rxn = bst.ParallelReaction([
                     X=1.0, basis='mol'),
 ])
 
-h2_in = bst.Stream(ID = 'Hydrogen_In', Hydrogen = 1000, units = 'kmol/hr', P = 3e6, phase = 'g')
+h2_in = bst.Stream(ID = 'Hydrogen_In', Hydrogen = 300 , units = 'kmol/hr', P = h2_pressure, phase = 'g')
 
-mixer = bst.units.Mixer(ins = (h2_in, F.RCF_Monomers), rigorous = True)
+
+dodcane_required = hdo_params['solvent_req']   #m3/kg of lignin oil
+dodecane_flow = F.RCF_Monomers.F_mass * dodcane_required
+solvent_stream = bst.Stream(ID = 'Dodecane_In', Dodecane = dodecane_flow, units = 'm3/hr', P = 101325, T = 300, phase = 'l')
+
+
+mixer = bst.units.Mixer(ins = (h2_in, F.RCF_Monomers, solvent_stream), rigorous = True)
 mixer.simulate()
 
-hdo_feed = bst.MultiStream('HDO_Feed', phases='lg')
-hdo_feed['l'].copy_flow(mixer.outs[0], IDs=['Propylguaiacol', 'Propylsyringol'])
-hdo_feed['g'].copy_flow(mixer.outs[0], IDs=['Hydrogen'])
 
-hydrodeoxygenation_rxn(mixer-0)
+compressor = bst.units.IsentropicCompressor(ins = mixer-0, P = hdo_params['P'], vle = True)
+compressor.simulate()
 
-print(hdo_feed)
+heater = bst.units.HXutility(ins = compressor-0, T = hdo_params['T'], rigorous= True)
+heater.simulate()
+
+
+HDO = HydrodeoxygenationReactor(ins = compressor-0, 
+                                T = hdo_params['T'],
+                                P = hdo_params['P'],
+                                tau = hdo_params['tau'],
+                                tau_0 = hdo_params['tau_0'],
+                                free_frac = hdo_params['free_frac'],
+                                V_max = hdo_params['V_max'],
+                                aspect_ratio = hdo_params['aspect_ratio'],
+                                reaction_1 = hydrodeoxygenation_rxn)
+HDO.simulate()
+
