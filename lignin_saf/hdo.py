@@ -54,7 +54,6 @@ rcf_combined_system = bst.System(
     facilities=[gas_mixer, BT],
 )
 rcf_combined_system.simulate()
-rcf_combined_system.show()
 
 
 # Hydrodeoxygenation reactions
@@ -66,30 +65,34 @@ hydrodeoxygenation_rxn = bst.ParallelReaction([
                     X=1.0, basis='mol'),
 ])
 
-h2_in = bst.Stream(ID = 'Hydrogen_In', Hydrogen = 300 , units = 'kmol/hr', P = h2_pressure, phase = 'g') 
+# Hydrogen required is 6 x moles of PG and 8 x moles of PS, but we also feed some excess which is recirculated
+h2_required = (6*(F.RCF_Monomers.imol['Propylguaiacol']) + 8*(F.RCF_Monomers.imol['Propylguaiacol']))*hdo_params['h2_excess']
+
+
+hdo_h2_in = bst.Stream(ID = 'HDO_H2_IN', Hydrogen = h2_required , units = 'kmol/hr', P = h2_pressure, phase = 'g') 
 
 
 dodcane_required = hdo_params['solvent_req']   #m3/kg of lignin oil
 dodecane_flow = F.RCF_Monomers.F_mass * dodcane_required
-solvent_stream = bst.Stream(ID = 'Dodecane_In', Dodecane = dodecane_flow, units = 'm3/hr', P = 101325, T = 300, phase = 'l')
+hdo_dodecane_in = bst.Stream(ID = 'HDO_DODECANE_IN', Dodecane = dodecane_flow, units = 'm3/hr', P = 101325, T = 300, phase = 'l')
 
 
 catalyst_required = hdo_params['catalyst_req']      # kg/kg of lignin oil
 catalyst_flow = F.RCF_Monomers.F_mass * catalyst_required
-catalyst_stream =  bst.Stream(ID = 'HDO_Catalyst_In', Ni2PSiO2 = catalyst_flow, units = 'kg/hr', phase = 's')
+hdo_cat_in =  bst.Stream(ID = 'HDO_CAT_IN', Ni2PSiO2 = catalyst_flow, units = 'kg/hr', phase = 's')
+
+# Mixes the monomers, hydrogen and solvent 
+hdo_mix_1 = bst.units.Mixer(ID = 'HDO-MIX1', ins = (hdo_h2_in, F.RCF_Monomers, hdo_dodecane_in), rigorous = True)
 
 
-mixer = bst.units.Mixer(ins = (h2_in, F.RCF_Monomers, solvent_stream), rigorous = True)
-mixer.simulate()
+# Compressing to the pressure required for HDO
+hdo_comp_1 = bst.units.IsentropicCompressor('HDO-COMP1', ins = hdo_mix_1-0, P = hdo_params['P'], vle = True)
 
-compressor = bst.units.IsentropicCompressor(ins = mixer-0, P = hdo_params['P'], vle = True)
-compressor.simulate()
+# Heating to the required temperature for HDO
+hdo_hx_1 = bst.units.HXutility(ID = 'HDO-HX1', ins = hdo_comp_1-0, T = hdo_params['T'], rigorous= True)
 
-heater = bst.units.HXutility(ins = compressor-0, T = hdo_params['T'], rigorous= True)
-heater.simulate()
-
-
-HDO = HydrodeoxygenationReactor(ins = (heater-0, catalyst_stream),
+# HDO reactor 
+hdo_rxr_1 = HydrodeoxygenationReactor(ID = 'HDO-RXR1', ins = (hdo_hx_1-0, hdo_cat_in),
                                 T = hdo_params['T'],
                                 P = hdo_params['P'],
                                 tau = hdo_params['tau'],
@@ -98,51 +101,44 @@ HDO = HydrodeoxygenationReactor(ins = (heater-0, catalyst_stream),
                                 V_max = hdo_params['V_max'],
                                 aspect_ratio = hdo_params['aspect_ratio'],
                                 reaction_1 = hydrodeoxygenation_rxn)
-HDO.simulate()
 
 # Cooling the batch reactor before getting the contents out
-cooler = bst.units.HXutility(ins = HDO-0, T = 400, rigorous = True)
-cooler.simulate()
+hdo_hx_2 = bst.units.HXutility(ID = 'HDO-HX2', ins = hdo_rxr_1-0, T = 400, rigorous = True)
 
 
 # Depressurizing for safety
-valve = bst.units.IsenthalpicValve(ins = cooler-0, P = 101325, vle = True)
-valve.simulate()
+hdO_v_1 = bst.units.IsenthalpicValve(ID = 'HDO-V1', ins = hdo_hx_2-0, P = 101325, vle = True)
 
 
 # Flashing the gaseous components
-flash = bst.units.Flash(ins = valve-0, T = 298, P = 101325)
-flash.simulate()
+hdo_flsh_1 = bst.units.Flash(ID = 'HDO-FLSH1', ins = hdO_v_1-0, T = 298, P = 101325)
 
 
 # Another flash downstream to remove water before PSA
 # The liquid outlet is almost pure water and has very little levels of methane, have to think about where to outlet this 
-flash_2 = bst.units.Flash(ins = flash-0, T = 275, P = 5e5)
-flash_2.simulate()
+hdo_flsh_2 = bst.units.Flash(ID = 'HDO-FLSH2', ins = hdo_flsh_1-0, T = 275, P = 5e5)
 
 
 # I believe 303 is a requirement for PSA but I'll need to double check
-psa_heater = bst.units.HXutility( ins=flash_2-0, T=303, rigorous=True)
-psa_heater.simulate()
+hdo_hx_3 = bst.units.HXutility(ID = 'HDO-HX3', ins=hdo_flsh_2-0, T=303, rigorous=True)
 
 
 # PSA for HDO - the hdo_gases will need to be routed to BT gas feed for combustion
-psa_hdo = PSA(ins=psa_heater-0, outs=('', 'hdo_gases')) 
-psa_hdo.simulate()
+hdo_psa_1 = PSA(ID = 'HDO-PSA1', ins=hdo_hx_3-0, outs=('', 'hdo_gases')) 
 
-hdo_solvent_recovery = bst.units.BinaryDistillation(ins=flash-1,
+
+# The bottoms of the hdo_solvent_recovery needs to be recycled
+hdo_col_1 = bst.units.BinaryDistillation(ID = 'HDO-COL1', ins=hdo_flsh_1-1,
     LHK=('propylcyclohexane', 'Dodecane'),
     Lr=0.99, Hr=1 - 0.0001, P=101325,
     vessel_material='Stainless steel 316',
     k=2, partial_condenser=True,
 )
-hdo_solvent_recovery.simulate()
 
-
-hdo_product_recovery = bst.units.BinaryDistillation(
-    ins=hdo_solvent_recovery-0,
+# The HDO_WW stream will eventually be routed to the centralized WWT, but that will probably happen later
+hdo_col_2 = bst.units.BinaryDistillation(ID = 'HDO-COL2',
+    ins= hdo_col_1-0,
     outs = ('HDO_WW', 'SAF_CycloAlkane'),
     LHK=('Water', 'Propylcyclohexane'),
     y_top=0.9, x_bot=0.001, P=101325, k=2,
 )
-hdo_product_recovery.simulate()

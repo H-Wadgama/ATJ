@@ -87,7 +87,8 @@ hdo_params = {
     'aspect_ratio' : 5,  # Assumed
     'solvent_decomp' : 0.05,
     'solvent_req' : 0.04,    # [m3/kg] From [1]
-    'catalyst_req' : 0.8
+    'catalyst_req' : 0.8,
+    'h2_excess' : 1.5    # 1.5 x stoichiometric amount of H2 required is fed - Assumed 
 }
 
 
