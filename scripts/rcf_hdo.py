@@ -44,12 +44,6 @@ rcf_oil_purification_sys.simulate()
 monomer_purification_sys.simulate()
 BT, WWT, gas_mixer = create_rcf_utilities_system()
 
-rcf_combined_system = bst.System(
-    'Combined_RCF_System',
-    path=(rcf_system, rcf_oil_purification_sys, monomer_purification_sys, WWT),
-    facilities=[gas_mixer, BT],
-)
-rcf_combined_system.simulate()
 
 # ── Area 400: Hydrodeoxygenation ───────────────────────────────────────────
 hdo_system = create_hdo_system(ins=F.RCF_Monomers)
@@ -65,3 +59,11 @@ F.unit.M601.ins.extend([F.HDO_wash_water, F.HDO_WW])
 # For rcf_etoh script, a solids_to_BT mixer is needed because ethanol system adds a second combustible stream (filter cake from S401.outs[0])
 # Since BT.ins[0] (solid intake stream for BT) only has 1 input, a mixer is needed in rcf integrated with cellulosic ethanol systems
 
+
+rcf_hdo_system = bst.System(
+    'Combined_RCF_System',
+    path=(rcf_system, rcf_oil_purification_sys, monomer_purification_sys, hdo_system, WWT),
+    facilities=[gas_mixer, BT],
+)
+
+rcf_hdo_system.simulate()

@@ -309,6 +309,98 @@ K = c_extract (hexane-rich) / c_raffinate (water-rich). All values are placehold
 | S_Oligomer | — | unlisted — oligomer; stays in raffinate |
 | G_Oligomer | — | unlisted — oligomer; stays in raffinate |
 
+## HDO System
+
+Built by `create_hdo_system(ins=None)` in `systems/hdo.py`. Accepts `RCF_Monomers` (Propylguaiacol + Propylsyringol from FLASH301) and converts them to propylcyclohexane (`SAF_CycloAlkane`) via catalytic hydrodeoxygenation over a Ni₂P/SiO₂ catalyst in dodecane solvent.
+
+**Import pattern:**
+```python
+from lignin_saf.systems.hdo import create_hdo_system
+hdo_system = create_hdo_system(ins=F.RCF_Monomers)
+hdo_system.simulate()
+```
+If `ins=None`, `F.RCF_Monomers` is grabbed from the main flowsheet — `monomer_purification_sys` must be simulated first.
+
+**Reactions:**
+```
+Propylguaiacol + 6 H₂  → propylcyclohexane + 2 H₂O + CH₄   (X = 1.0, mol basis)
+Propylsyringol + 8 H₂  → propylcyclohexane + 3 H₂O + 2 CH₄  (X = 1.0, mol basis)
+```
+
+**Unit operations:**
+
+| Unit ID | Variable Name | Type | Function | Key Parameters |
+|---|---|---|---|---|
+| HDO_MIX_H2 | `hdo_h2_mix` | Mixer | Mix fresh H₂ + H₂ recycle | spec: `fresh = (6×mol_PG + 8×mol_PS) × 1.5 − recycle`; outlet forced to gas |
+| HDO_MIX_DOD | `hdo_dodecane_mix` | Mixer | Mix fresh dodecane + dodecane recycle; also updates catalyst flow | spec: `fresh = solvent_req × F_mass × ρ_dod − recycle`; catalyst = 0.8 kg/kg monomers |
+| HDO_MIX1 | `hdo_mix_1` | Mixer | Mix H₂ feed + monomers + dodecane feed | rigorous=True |
+| HDO_COMP1 | `hdo_comp_1` | IsentropicCompressor | Compress to HDO operating pressure | P=5 MPa, vle=True |
+| HDO_HX1 | `hdo_hx_1` | HXutility | Heat to HDO operating temperature | T=573 K (300°C), rigorous |
+| HDO_RXR1 | `hdo_rxr_1` | `HydrodeoxygenationReactor` (custom) | Batch HDO reaction | T=573 K, P=5 MPa, τ=5 hr, τ₀=1 hr, free_frac=0.10, V_max=600 m³, aspect_ratio=5 |
+| HDO_HX2 | `hdo_hx_2` | HXutility | Cool reactor effluent before pressure let-down | T=400 K, rigorous |
+| HDO_V1 | `hdo_v_1` | IsenthalpicValve | Depressurize to atmospheric | P=101325 Pa, vle=True |
+| HDO_FLSH1 | `hdo_flsh_1` | Flash | Separate gas (H₂, CH₄) from liquid (product + solvent + water) | T=298 K, P=101325 Pa |
+| HDO_FLSH2 | `hdo_flsh_2` | Flash | Dry gas before PSA; `HDO_wash_water` (liquid, near-pure water) → WWT | T=275 K, P=5 bar |
+| HDO_HX3 | `hdo_hx_3` | HXutility | Reheat dried gas to PSA inlet temperature | T=303 K, rigorous |
+| HDO_PSA1 | `hdo_psa_1` | `PSA` (custom) | Recover H₂ for recycle; purge light gases → BT | outs=(`HDO_h2_recycle` feed, `HDO_purge_gases`) |
+| HDO_COMP_H2 | `hdo_h2_comp` | IsentropicCompressor | Recompress recovered H₂ to HDO pressure | P=5 MPa, vle=True; gas phase enforced by spec |
+| HDO_COL1 | `hdo_col_1` | BinaryDistillation | Solvent recovery: propylcyclohexane (vapor tops) from dodecane (liquid bottoms) | LHK=(propylcyclohexane, Dodecane), Lr=0.99, Hr=0.9999, P=1 atm, partial_condenser=True |
+| HDO_HX_DOD | `hdo_dodecane_cooler` | HXutility | Cool recovered dodecane to feed temperature for recycle | T=300 K, rigorous |
+| HDO_COL2 | `hdo_col_2` | BinaryDistillation | Remove residual water (`HDO_WW`, tops) → WWT; isolate propylcyclohexane (`SAF_CycloAlkane`, bottoms) | LHK=(Water, Propylcyclohexane), y_top=0.9, x_bot=0.001, P=1 atm |
+
+**Recycle loops:**
+
+| Recycle Stream | Path |
+|---|---|
+| `HDO_h2_recycle` | `hdo_h2_comp` (HDO_COMP_H2) → `hdo_h2_mix` (HDO_MIX_H2) |
+| `HDO_dodecane_recycle` | `hdo_dodecane_cooler` (HDO_HX_DOD) → `hdo_dodecane_mix` (HDO_MIX_DOD) |
+
+Recycle specs mirror the pattern in `systems/rcf.py`: fresh feed = required total − recycle, computed on every iteration. The `h2_flow` spec uses `ins.imol` to read monomer flows; `dodecane_flow` converts from volumetric (`solvent_req` in m³/kg) to mass using thermosteam's `Dodecane.rho()`.
+
+**Input streams:**
+
+| Stream | Contents | Conditions | Price |
+|---|---|---|---|
+| `ins` (`RCF_Monomers`) | Propylguaiacol + Propylsyringol | Liquid, ambient | No price — MSP target stream |
+| `HDO_H2_IN` | Fresh H₂ makeup | Gas, 30 bar | `prices['Hydrogen']` |
+| `HDO_DODECANE_IN` | Fresh dodecane makeup | Liquid, 300 K, 1 atm | No price set |
+| `HDO_CAT_IN` | Ni₂P/SiO₂ catalyst | Solid | No price set |
+
+**Output streams:**
+
+| Stream | Source Unit | Description | Downstream |
+|---|---|---|---|
+| `SAF_CycloAlkane` | HDO_COL2 bottoms | Propylcyclohexane product | SAF blending / further upgrading |
+| `HDO_purge_gases` | HDO_PSA1 outs[1] | H₂, CH₄, light gases | → `gas_mixer.ins.append(F.HDO_purge_gases)` → BT |
+| `HDO_wash_water` | HDO_FLSH2 outs[1] | Near-pure water condensate from secondary flash | → `F.unit.M601.ins.extend([...])` → WWT |
+| `HDO_WW` | HDO_COL2 outs[0] | Water-rich tops from product column | → `F.unit.M601.ins.extend([...])` → WWT |
+
+**Stream routing in the calling script (`scripts/rcf_hdo.py`):**
+```python
+# Append HDO purge gases to gas_mixer — do NOT assign to BT.ins[1] directly,
+# which would overwrite the gas_mixer connection and disconnect RCF PSA purge + WWT biogas.
+gas_mixer.ins.append(F.HDO_purge_gases)
+
+# Route HDO wastewater to WWT inlet mixer M601
+F.unit.M601.ins.extend([F.HDO_wash_water, F.HDO_WW])
+```
+
+**No `solids_to_BT` mixer needed:** the HDO system produces no combustible solids. `BT.ins[0] = WWT.outs[1]` (the direct wire set inside `create_rcf_utilities_system()`) remains correct as-is.
+
+**Process conditions (from `ligsaf_settings.py` → `hdo_params`):**
+
+| Parameter | Value |
+|---|---|
+| T | 573 K (300°C) |
+| P | 5 MPa (50 bar) |
+| τ (time on stream per batch) | 5 hr |
+| τ₀ (turnaround time per batch) | 1 hr |
+| H₂ excess factor | 1.5 × stoichiometric |
+| Dodecane solvent loading (`solvent_req`) | 0.04 m³/kg monomer feed |
+| Catalyst loading (`catalyst_req`) | 0.8 kg/kg monomer feed |
+| V_max per vessel | 600 m³ |
+| Aspect ratio | 5 |
+
 ## Utilities System (Area 400 + 500)
 
 Built by `create_rcf_utilities_system()` in `systems/ligsaf_utilities.py`. Returns `(BT, WWT, gas_mixer)`. Call after all upstream factory functions so the required named streams exist on the flowsheet.
@@ -766,9 +858,11 @@ Slots 0–5 are colorblind-friendly (Wong 2011). Add new entries at the end if m
 | `systems/rcf_oil_purification.py` | `create_rcf_oil_purification_system(ins=None)` — Area 300 EtOAc LLE factory function |
 | `systems/monomer_purification.py` | `create_monomer_purification_system(ins=None)` — Area 300 hexane LLE monomer/dimer separation factory function |
 | `systems/cellulosic_ethanol.py` | `create_cellulosic_ethanol_system(ins=None, add_denaturant=True)` — single factory covering both use cases. `WWT=False, CHP=False` always; pass `add_denaturant=False` when ethanol routes to ETJ instead of being sold as fuel-grade ethanol (sets `M701.denaturant_fraction=0.0`). |
+| `systems/hdo.py` | `create_hdo_system(ins=None)` — HDO upgrading factory; H₂ and dodecane recycles converged by BioSTEAM |
 | `systems/ligsaf_utilities.py` | `create_rcf_utilities_system()` — Area 400 + 500; returns `(BT, WWT, gas_mixer)` |
 | `scripts/rcf_etoh.py` | Entry-point script: builds and simulates the full integrated system (RCF + ethanol) |
 | `scripts/rcf_etoh_etj.py` | Entry-point script for the fully integrated RCF + cellulosic ethanol + ETJ biorefinery. Poplar → RCF lignin monomers co-produced with SAF/RN/RD from ETJ upgrading of cellulosic ethanol. Uses `systems/cellulosic_ethanol.create_cellulosic_ethanol_system(add_denaturant=False)` so all ethanol routes to ETJ. Shared utilities (BT, WWT) serve all three areas. See "RCF + ETJ Integrated Biorefinery" section for integration details and open TEA items. |
+| `scripts/rcf_hdo.py` | Entry-point script: builds and simulates the RCF + HDO upgrading system. Poplar → RCF lignin monomers → propylcyclohexane (`SAF_CycloAlkane`). HDO purge gases routed to `gas_mixer` → BT; HDO wastewater routed to WWT via `M601.ins`. No cellulosic ethanol co-product in this script. |
 
 ## Repo Clean-up Status
 
@@ -778,6 +872,7 @@ Slots 0–5 are colorblind-friendly (Wong 2011). Add new entries at the end if m
 - **Deleted legacy/scratch files** — `combined_trial_1/2.py`, `cellulosic_ethanol_legacy.py`, `solo_ethanol.py`, `solo_ethanol_no_facilities.py`, `rcf_purification.py` all removed.
 - **Moved entry-point scripts to `scripts/`** — `scripts/rcf_etoh.py` and `scripts/rcf_etoh_etj.py`.
 - **Moved factory functions to `systems/`** — all five factory files now live under `lignin_saf/systems/`.
+- **Added `systems/hdo.py`** — `create_hdo_system(ins=None)` factory with H₂ and dodecane recycle loops; H₂ bug fixed (was using Propylguaiacol for both terms); all unit IDs use underscores per convention. Entry-point script at `scripts/rcf_hdo.py`.
 
 ### TODO
 

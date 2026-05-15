@@ -34,39 +34,44 @@ Then delete `<env>/lib/site-packages/flexsolve/__pycache__/numerical_analysis.cp
 
 The main working notebook is `rcf_system.ipynb`. Open it in VS Code or Jupyter and run cells sequentially.
 
-For standalone scripts, two entry-point files are available:
+For standalone scripts, entry-point files are available under `scripts/`:
 
-- `rcf_purification.py` — builds and simulates the combined system (Areas 200–500): RCF + EtOAc LLE + WWT + BT. Good for quick iteration on the integrated process.
-- `rcf_4_21_2026` — same combined system with an additional TEA call at the end. Used for cost analysis runs.
+- `scripts/rcf_etoh.py` — RCF + cellulosic ethanol co-product; shared BT + WWT utilities; full TEA and MSP solve.
+- `scripts/rcf_hdo.py` — RCF + HDO upgrading; converts purified lignin monomers to propylcyclohexane (`SAF_CycloAlkane`); shared BT + WWT utilities.
+- `scripts/rcf_etoh_etj.py` — RCF + cellulosic ethanol + ETJ catalytic upgrading to SAF/RN/RD; fully integrated shared utilities.
 
-Both scripts follow the same pattern: set up thermodynamics, call the factory functions, assemble the combined system, simulate.
+All scripts follow the same pattern: set up thermodynamics, call the factory functions, assemble the combined system, simulate.
 
 ## Process areas
 
 The proposed process areas are:
 Area 100: Feed storage and handling
 Area 200: RCF (reductive catalytic fractionation — solvolysis + hydrogenolysis + solvent recovery + pulp drying)
-Area 300: Products recovery (EtOAc liquid–liquid extraction → purified lignin oil)
+Area 300: Products recovery (EtOAc LLE → purified lignin oil; hexane LLE → purified monomers)
 Area 400: Wastewater treatment
 Area 500: Combustor, boiler and turbogenerator
 Area 600: Product and feed chemical storage
 Area 700: Utilities
+HDO: Hydrodeoxygenation upgrading of purified monomers to propylcyclohexane (SAF precursor)
 
-Current design includes Area 200, 300, 400, and 500. Areas 100, 600, and 700 are not yet modeled.
+Current design includes Areas 200, 300, 400, and 500. The HDO upgrading step is implemented in `systems/hdo.py` and assembled in `scripts/rcf_hdo.py`. Areas 100, 600, and 700 are not yet modeled.
 
 ## Key source files
 
 | File | Role |
 |---|---|
-| `ligsaf_system.py` | `create_rcf_system(ins=None)` — Area 200 factory function |
-| `ligsaf_purification_system.py` | `create_rcf_oil_purification_system(ins=None)` — Area 300 EtOAc LLE factory function |
-| `monomer_purification.py` | `create_monomer_purification_system(ins=None)` — Area 300 hexane LLE monomer/dimer separation factory function |
-| `ethanol_production.py` | Local `create_cellulosic_ethanol_system` with `WWT=False, CHP=False`; no BT or WWT created — shared RCF utilities serve the full biorefinery |
-| `ligsaf_utilities_system.py` | `create_rcf_utilities_system()` — Area 400 + 500 factory function; returns `(BT, WWT, gas_mixer)` |
-| `ligsaf_units.py` | Custom BioSTEAM unit classes: `SolvolysisReactor`, `HydrogenolysisReactor`, `PSA`, `CatalystMixer` |
-| `ligsaf_settings.py` | All process parameters, prices, biomass composition, partition coefficients |
+| `systems/rcf.py` | `create_rcf_system(ins=None)` — Area 200 factory function |
+| `systems/rcf_oil_purification.py` | `create_rcf_oil_purification_system(ins=None)` — Area 300 EtOAc LLE factory function |
+| `systems/monomer_purification.py` | `create_monomer_purification_system(ins=None)` — Area 300 hexane LLE monomer/dimer separation factory function |
+| `systems/hdo.py` | `create_hdo_system(ins=None)` — HDO upgrading factory; H₂ and dodecane recycles converged by BioSTEAM |
+| `systems/cellulosic_ethanol.py` | `create_cellulosic_ethanol_system(ins=None, add_denaturant=True)` — `WWT=False, CHP=False`; shared RCF utilities serve the full biorefinery |
+| `systems/ligsaf_utilities.py` | `create_rcf_utilities_system()` — Area 400 + 500 factory function; returns `(BT, WWT, gas_mixer)` |
+| `ligsaf_units.py` | Custom BioSTEAM unit classes: `SolvolysisReactor`, `HydrogenolysisReactor`, `HydrodeoxygenationReactor`, `PSA`, `CatalystMixer` |
+| `ligsaf_settings.py` | All process parameters, prices, biomass composition, partition coefficients, `hdo_params` |
 | `ligsaf_chemicals.py` | Chemical property definitions |
-| `rcf_purification.py` | Entry-point script: builds and simulates the combined system (Areas 200–500) |
+| `scripts/rcf_etoh.py` | Entry-point script: RCF + cellulosic ethanol co-product; full TEA and MSP solve |
+| `scripts/rcf_hdo.py` | Entry-point script: RCF + HDO upgrading to propylcyclohexane (`SAF_CycloAlkane`) |
+| `scripts/rcf_etoh_etj.py` | Entry-point script: RCF + cellulosic ethanol + ETJ catalytic upgrading to SAF/RN/RD |
 | `rcf_system.ipynb` | Main interactive notebook for full integrated system analysis |
 
 ## Utilities system (Area 400 + 500)
@@ -156,6 +161,31 @@ BT.ins[0] = solid_mixer.outs[0]
 # in combined system: facilities=[solid_mixer, BT]
 ```
 
+
+## HDO System
+
+`create_hdo_system(ins=None)` in `systems/hdo.py` converts the purified lignin monomers (Propylguaiacol + Propylsyringol from `RCF_Monomers`) to propylcyclohexane (`SAF_CycloAlkane`) via hydrodeoxygenation over Ni₂P/SiO₂ in dodecane solvent.
+
+```python
+from lignin_saf.systems.hdo import create_hdo_system
+hdo_system = create_hdo_system(ins=F.RCF_Monomers)
+hdo_system.simulate()
+```
+
+The system has two converged recycle loops:
+- **H₂ recycle** — PSA (HDO_PSA1) recovers unreacted H₂, which is recompressed to 5 MPa (HDO_COMP_H2) and recycled to the H₂ mixer (HDO_MIX_H2). Fresh H₂ makeup is adjusted every iteration: `fresh = (6×mol_PG + 8×mol_PS) × 1.5 excess − recycle`.
+- **Dodecane recycle** — the solvent-recovery column (HDO_COL1) separates propylcyclohexane (tops) from dodecane (bottoms). The dodecane bottoms are cooled to 300 K (HDO_HX_DOD) and recycled to the dodecane mixer (HDO_MIX_DOD). Fresh dodecane makeup is adjusted to maintain 0.04 m³/kg monomer feed.
+
+**Named output streams for downstream wiring:**
+
+| Stream | Description | Route in calling script |
+|---|---|---|
+| `SAF_CycloAlkane` | Propylcyclohexane product | product / further upgrading |
+| `HDO_purge_gases` | PSA purge (H₂, CH₄, light gases) | `gas_mixer.ins.append(F.HDO_purge_gases)` |
+| `HDO_wash_water` | Near-pure water from secondary flash | `F.unit.M601.ins.extend([F.HDO_wash_water, F.HDO_WW])` |
+| `HDO_WW` | Water-rich tops from product column | same as above |
+
+The HDO system produces no combustible solids, so no `solids_to_BT` mixer is needed — `BT.ins[0] = WWT.outs[1]` set inside `create_rcf_utilities_system()` remains correct.
 
 ## Unified utilities for the integrated biorefinery
 
