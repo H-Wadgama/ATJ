@@ -135,7 +135,7 @@ def create_hdo_system(ins=None):
     hdo_flsh_1 = bst.units.Flash(ID='HDO_FLSH1', ins=hdo_v_1-0, T=298, P=101325)
 
     # ── Secondary flash: dry gas before PSA; liquid is near-pure water ────────
-    # HDO_wash_water (outs[1]) → route to WWT in calling script
+    # HDO_wash_water (outs[1]), will be routed to WWT in script that calls it
     hdo_flsh_2 = bst.units.Flash(
         ID='HDO_FLSH2', ins=hdo_flsh_1-0,
         outs=('', 'HDO_wash_water'),

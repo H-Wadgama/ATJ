@@ -58,5 +58,10 @@ hdo_system.simulate()
 # Route HDO purge gases to BT gas combustion
 gas_mixer.ins.append(F.HDO_purge_gases)
 
-# Route HDO wastewater streams to WWT
-# F.HDO_wash_water and F.HDO_WW should be added to WWT.ins in a future integration step
+
+# Route HDO wastewater streams to WWT inlet mixer
+F.unit.M601.ins.extend([F.HDO_wash_water, F.HDO_WW])
+# Sludge from WWT is already connected to BT in this system. 
+# For rcf_etoh script, a solids_to_BT mixer is needed because ethanol system adds a second combustible stream (filter cake from S401.outs[0])
+# Since BT.ins[0] (solid intake stream for BT) only has 1 input, a mixer is needed in rcf integrated with cellulosic ethanol systems
+
