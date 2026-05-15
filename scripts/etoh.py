@@ -1,10 +1,14 @@
 # RCF + cellulosic ethanol without dilute-acid pretreatment.
 # Carbohydrate_Pulp from RCF feeds directly into enzymatic saccharification.
 
+# This script has some issues at the moment 
+
+
 from lignin_saf.ligsaf_chemicals import create_chemicals
 from lignin_saf.ligsaf_settings import feed_parameters, prices
 from lignin_saf.systems.rcf import create_rcf_system
 from lignin_saf.systems.cellulosic_ethanol_no_preatreatment import create_cellulosic_ethanol_system
+from lignin_saf.cellulosic_tea import create_cellulosic_ethanol_tea
 
 from biosteam import main_flowsheet as F
 import biosteam as bst
@@ -30,6 +34,10 @@ poplar_in = bst.Stream('Poplar_In',
 # ── Area 200: RCF process ──────────────────────────────────────────────────
 rcf_system = create_rcf_system(ins=poplar_in)
 rcf_system.simulate()
+
+
+
+
 
 # ── Cellulosic ethanol — Carbohydrate_Pulp feeds directly into fermentation ─
 etoh_system = create_cellulosic_ethanol_system(ins=F.Carbohydrate_Pulp)
@@ -66,3 +74,24 @@ combined_system = bst.System(
     facilities=[solids_to_BT, gas_mixer, BT],
 )
 combined_system.simulate()
+
+
+
+# ── Labor (Seider methodology) ─────────────────────────────────────────────
+operators_per_section = 1
+num_process_sections = 3
+num_operators_per_shift = operators_per_section * num_process_sections * 1
+num_shifts = 5
+pay_rate = 40
+DWandB = num_operators_per_shift * num_shifts * 2080 * pay_rate
+Dsalaries_benefits = 0.15 * DWandB
+O_supplies = 0.06 * DWandB
+technical_assistance = 5 * 75000
+control_lab = 5 * 80000
+labor = DWandB + Dsalaries_benefits + O_supplies + technical_assistance + control_lab
+
+# ── TEA and MSP ────────────────────────────────────────────────────────────
+integrated_tea = create_cellulosic_ethanol_tea(rcf_combined_system)
+integrated_tea.labor_cost = labor
+
+print(f'The MSP for RCF monomers is  {round(integrated_tea.solve_price(F.RCF_Monomers), 3)} USD/kg')
