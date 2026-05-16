@@ -16,7 +16,7 @@ def create_hdo_system(ins=None):
     Returns
     -------
     bst.System
-        'HDO_System' with h2_recycle and dodecane_recycle converged.
+        'HDO_System' with hydrogen and dodecane (solvent for HDO) recycle
 
     Notes
     -----
@@ -26,8 +26,8 @@ def create_hdo_system(ins=None):
         bst.settings.CEPCI = 541.7
 
     Named output streams for downstream wiring:
-        HDO_purge_gases  — PSA purge (H2, CH4, light gases) → route to gas_mixer → BT
-        HDO_wash_water   — liquid bleed from HDO_FLSH2 (near-pure water) → route to WWT
+        HDO_purge_gases  — PSA purge (H2, CH4, light gases) → route to gas_mixer, which goes to BT
+        HDO_wash_water   — liquid from Flash (HDO_FLSH2). Almost pure water - routed to WWT
         HDO_WW           — water tops from HDO_COL2 → route to WWT
         SAF_CycloAlkane  — propylcyclohexane product
     """
@@ -51,8 +51,8 @@ def create_hdo_system(ins=None):
     ])
 
     # ── Recycle streams ───────────────────────────────────────────────────────
-    h2_recycle = bst.Stream('HDO_h2_recycle', phase='g', P=hdo_params['P'])
-    dodecane_recycle = bst.Stream('HDO_dodecane_recycle', Dodecane=0, phase='l', P=101325, T=300)
+    hdo_h2_recycle = bst.Stream('HDO_H2_RECYCLE', phase='g', P=hdo_params['P'])
+    hdo_dodecane_recycle = bst.Stream('HDO_DODECANE_RECYCLE', Dodecane=0, phase='l', P=101325, T=300)
 
     # ── Fresh feeds ───────────────────────────────────────────────────────────
     hdo_h2_in = bst.Stream(
@@ -68,7 +68,7 @@ def create_hdo_system(ins=None):
     )
 
     # ── H2 mixer: adjusts fresh H2 to make up for recycle shortfall ──────────
-    hdo_h2_mix = bst.units.Mixer('HDO_MIX_H2', ins=(hdo_h2_in, h2_recycle))
+    hdo_h2_mix = bst.units.Mixer('HDO_MIX1', ins=(hdo_h2_in, hdo_h2_recycle))
 
     @hdo_h2_mix.add_specification(run=True)
     def h2_flow():
@@ -81,7 +81,7 @@ def create_hdo_system(ins=None):
         hdo_h2_mix.outs[0].phase = 'g'
 
     # ── Dodecane mixer: adjusts fresh dodecane to make up for recycle shortfall ─
-    hdo_dodecane_mix = bst.units.Mixer('HDO_MIX_DOD', ins=(hdo_dodecane_in, dodecane_recycle))
+    hdo_dodecane_mix = bst.units.Mixer('HDO_MIX2', ins=(hdo_dodecane_in, hdo_dodecane_recycle))
 
     @hdo_dodecane_mix.add_specification(run=True)
     def dodecane_flow():
@@ -95,15 +95,15 @@ def create_hdo_system(ins=None):
         hdo_cat_in.imass['Ni2PSiO2'] = ins.F_mass * hdo_params['catalyst_req']
 
     # ── Main feed mixer ───────────────────────────────────────────────────────
-    hdo_mix_1 = bst.units.Mixer(
-        ID='HDO_MIX1',
+    hdo_mix_3 = bst.units.Mixer(
+        ID='HDO_MIX3',
         ins=(hdo_h2_mix-0, ins, hdo_dodecane_mix-0),
         rigorous=True,
     )
 
     # ── Compress to HDO operating pressure ───────────────────────────────────
     hdo_comp_1 = bst.units.IsentropicCompressor(
-        'HDO_COMP1', ins=hdo_mix_1-0, P=hdo_params['P'], vle=True,
+        'HDO_COMP1', ins=hdo_mix_3-0, P=hdo_params['P'], vle=True,
     )
 
     # ── Heat to HDO operating temperature ─────────────────────────────────────
@@ -150,7 +150,7 @@ def create_hdo_system(ins=None):
 
     # ── Recompress recovered H2 to HDO operating pressure for recycle ─────────
     hdo_h2_comp = bst.units.IsentropicCompressor(
-        'HDO_COMP_H2', ins=hdo_psa_1-0, outs=h2_recycle,
+        'HDO_COMP_H2', ins=hdo_psa_1-0, outs=hdo_h2_recycle,
         P=hdo_params['P'], vle=True,
     )
 
@@ -170,7 +170,7 @@ def create_hdo_system(ins=None):
 
     # ── Cool recovered dodecane to feed temperature for recycle ───────────────
     hdo_dodecane_cooler = bst.units.HXutility(
-        ID='HDO_HX_DOD', ins=hdo_col_1-1, outs=dodecane_recycle,
+        ID='HDO_HX_DOD', ins=hdo_col_1-1, outs=hdo_dodecane_recycle,
         T=300, rigorous=True,
     )
 
@@ -187,11 +187,11 @@ def create_hdo_system(ins=None):
     return bst.System(
         'HDO_System',
         path=(
-            hdo_h2_mix, hdo_dodecane_mix, hdo_mix_1,
+            hdo_h2_mix, hdo_dodecane_mix, hdo_mix_3,
             hdo_comp_1, hdo_hx_1, hdo_rxr_1,
             hdo_hx_2, hdo_v_1, hdo_flsh_1,
             hdo_flsh_2, hdo_hx_3, hdo_psa_1, hdo_h2_comp,
             hdo_col_1, hdo_dodecane_cooler, hdo_col_2,
         ),
-        recycle=(h2_recycle, dodecane_recycle),
+        recycle=(hdo_h2_recycle, hdo_dodecane_recycle),
     )

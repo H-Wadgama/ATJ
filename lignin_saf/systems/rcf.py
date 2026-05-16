@@ -52,15 +52,15 @@ def create_rcf_system(ins=None):
                          phase='l', units='kg/d', price=prices['Feedstock'])
 
     # ── Recycle streams ───────────────────────────────────────────────────────
-    meoh_recycle = bst.MultiStream('Meoh_recycle', phases=('s', 'l', 'g'))
-    hydrogen_recycle = bst.Stream('hydrogen_recycle', P=3e6, phase='g')
+    rcf_meoh_recycle = bst.MultiStream('Meoh_recycle', phases=('s', 'l', 'g'))
+    rcf_h2_recycle = bst.Stream('hydrogen_recycle', P=3e6, phase='g')
 
     # ── Co-feeds ──────────────────────────────────────────────────────────────
     # Methanol and water split into separate streams so price applies only to methanol
-    meoh_in = bst.Stream('Meoh_in', Methanol=0.0, phase='l', units='kg/hr', price=prices['Methanol'])
-    water_in_meoh = bst.Stream('Water_in_meoh', Water=0.0, phase='l', units='kg/hr')
+    rcf_meoh_in = bst.Stream('RCF_MEOH_IN', Methanol=0.0, phase='l', units='kg/hr', price=prices['Methanol'])
+    rcf_water_in = bst.Stream('RCF_H2O_IN', Water=0.0, phase='l', units='kg/hr')
 
-    hydrogen_in = bst.Stream('Hydrogen_In',
+    rcf_h2_in = bst.Stream('RCF_H2_IN',
                              Hydrogen=h2_biomass_ratio * 2e6,
                              units='kg/day',
                              T=80 + 273.15,   # 80°C PEM electrolyzer outlet
@@ -71,14 +71,14 @@ def create_rcf_system(ins=None):
     # ── Unit operations ───────────────────────────────────────────────────────
 
     # MeOH mixer: adjusts fresh feed to make up for what the recycle doesn't supply
-    meoh_h2o_mix = bst.units.Mixer('MIX100', ins=(meoh_in, water_in_meoh, meoh_recycle), rigorous=True)
+    rcf_mix_1 = bst.units.Mixer('MIX100', ins=(rcf_meoh_in, rcf_water_in, rcf_meoh_recycle), rigorous=True)
 
-    @meoh_h2o_mix.add_specification(run=True)
+    @rcf_mix_1.add_specification(run=True)
     def meoh_water_flow():
-        meoh_fresh     = meoh_h2o_mix.ins[0]
-        water_fresh    = meoh_h2o_mix.ins[1]
-        recycle_solvent = meoh_h2o_mix.ins[2]
-        total_vol_hr = solvolysis_reactor.compute_Q_total()  # m³/hr — derived from bed geometry
+        meoh_fresh     = rcf_mix_1.ins[0]
+        water_fresh    = rcf_mix_1.ins[1]
+        recycle_solvent = rcf_mix_1.ins[2]
+        total_vol_hr = rcf_rxr_1.compute_Q_total()  # m³/hr — derived from bed geometry
         meoh_flow_mol = (
             total_vol_hr * meoh_h2o / (meoh_h2o + 1)
             * chems['Methanol'].rho(phase='l', T=rcf_conditions['T'], P=rcf_conditions['P'])
@@ -91,15 +91,15 @@ def create_rcf_system(ins=None):
         )
         meoh_fresh.imol['Methanol']  = meoh_flow_mol  - recycle_solvent.imol['Methanol']
         water_fresh.imol['Water']    = water_flow_mol - recycle_solvent.imol['Water']
-        meoh_h2o_mix.outs[0].phases = ('s', 'l', 'g')  # needed by downstream reactors
+        rcf_mix_1.outs[0].phases = ('s', 'l', 'g')  # needed by downstream reactors
 
-    meoh_pump = bst.units.Pump('PUMP101', ins=meoh_h2o_mix-0, P=rcf_conditions['P'])
+    rcf_pump_1 = bst.units.Pump('RCF_PUMP1', ins=rcf_mix_1-0, P=rcf_conditions['P'])
 
-    meoh_heater = bst.units.HXutility('HX102', ins=meoh_pump-0, T=rcf_conditions['T'], rigorous=True)
+    rcf_hx_1 = bst.units.HXutility('RCF_HX1', ins=rcf_pump_1-0, T=rcf_conditions['T'], rigorous=True)
 
-    @meoh_heater.add_specification(run=True)
+    @rcf_hx_1.add_specification(run=True)
     def set_meoh_heater_phases():
-        meoh_heater.outs[0].phases = ('l', 'g')
+        rcf_hx_1.outs[0].phases = ('l', 'g')
 
     # Solvolysis reactions
     solvolysis_rxn = bst.Reaction(
@@ -114,9 +114,9 @@ def create_rcf_system(ins=None):
                      X=solvolysis_parameters['MeOH_CO'], basis='wt', correct_atomic_balance=False),
     ])
 
-    solvolysis_reactor = SolvolysisReactor(
-        'RCF103_S',
-        ins=(ins, meoh_heater-0),
+    rcf_rxr_1 = SolvolysisReactor(
+        'RCF_RXR1',
+        ins=(ins, rcf_hx_1-0),
         outs=('Wet_Pulp', 'Solvolysis_Liquor'),
         T=rcf_conditions['T'],
         P=rcf_conditions['P'],
@@ -133,20 +133,20 @@ def create_rcf_system(ins=None):
     )
 
     # H2 mixer: adjusts fresh H2 to make up for recycle shortfall
-    h2_mixer = bst.units.Mixer('MIX104', ins=(hydrogen_in, hydrogen_recycle))
+    rcf_mix_2 = bst.units.Mixer('RCF_MIX2', ins=(rcf_h2_in, rcf_h2_recycle))
 
-    @h2_mixer.add_specification(run=True)
+    @rcf_mix_2.add_specification(run=True)
     def h2_flow():
-        fresh_h2 = h2_mixer.ins[0]
-        recycle_h2 = h2_mixer.ins[1]
+        fresh_h2 = rcf_mix_2.ins[0]
+        recycle_h2 = rcf_mix_2.ins[1]
         fresh_h2.imass['Hydrogen'] = (h2_biomass_ratio * (2e6 / 24)) - recycle_h2.imass['Hydrogen']
-        h2_mixer.outs[0].phase = 'g'
+        rcf_mix_2.outs[0].phase = 'g'
 
-    h2_pre_heat = bst.units.HXutility('HX105', ins=h2_mixer-0, T=rcf_conditions['T'], rigorous=True)
+    rcf_hx_2 = bst.units.HXutility('RCF_HX2', ins=rcf_mix_2-0, T=rcf_conditions['T'], rigorous=True)
 
-    @h2_pre_heat.add_specification(run=True)
+    @rcf_hx_2.add_specification(run=True)
     def set_h2_preheat_phase():
-        h2_pre_heat.outs[0].phase = 'g'
+        rcf_hx_2.outs[0].phase = 'g'
 
     # Hydrogenolysis reactions
     # The six parallel reactions are designed so that ΣXi = Monomers + Dimers + Oligomers = 1.0
@@ -171,83 +171,83 @@ def create_rcf_system(ins=None):
                      X=_X_scale * (rcf_oil_yield['Oligomers'] * 0.5 + rcf_oil_yield['Monomers'] * 0.5 * condensation_extent), basis='wt', correct_atomic_balance=False),
     ])
 
-    hydrogenolysis_reactor = HydrogenolysisReactor(
-        'RCF106_H',
-        ins=(solvolysis_reactor.outs[1], h2_pre_heat-0),
+    rcf_rxr_2 = HydrogenolysisReactor(
+        'RCF_RXR2',
+        ins=(rcf_rxr_1.outs[1], rcf_hx_2-0),
         P=rcf_conditions['P'],
         T=rcf_conditions['T'],
         superficial_velocity=0.003,
         reaction=hydrogenolysis,
     )
 
-    R102 = bst.units.Flash('FLASH107', ins=hydrogenolysis_reactor-0, T=320, P=5e5)
+    rcf_flsh_1 = bst.units.Flash('RCF_FLSH1', ins=rcf_rxr_2-0, T=320, P=5e5)
 
-    pre_psa_pump = bst.units.IsentropicCompressor('PUMP108', ins=R102-0, P=5e5, vle=True)
-    pre_psa_flash = bst.units.Flash('FLASH109', ins=pre_psa_pump-0, T=260, P=5e5)
+    rcf_comp_1 = bst.units.IsentropicCompressor('RCF_COMP1', ins=rcf_flsh_1-0, P=5e5, vle=True)
+    rcf_flsh_2 = bst.units.Flash('RCF_FLSH2', ins=rcf_comp_1-0, T=260, P=5e5)
 
-    pre_psa_heater = bst.units.HXutility('HX110', ins=pre_psa_flash-0, T=303, rigorous=True)
+    rcf_hx_3 = bst.units.HXutility('RCF_HX3', ins=rcf_flsh_2-0, T=303, rigorous=True)
 
-    @pre_psa_heater.add_specification(run=True)
+    @rcf_hx_3.add_specification(run=True)
     def set_psa_inlet_phase():
-        pre_psa_heater.outs[0].phase = 'g'
+        rcf_hx_3.outs[0].phase = 'g'
 
-    psa_system = PSA('PSA111', ins=pre_psa_heater.outs[0], outs=('', 'Purge_Light_Gases'))
+    rcf_psa_1 = PSA('RCF_PSA1', ins=rcf_hx_3.outs[0], outs=('', 'Purge_Light_Gases'))
 
-    h2_pump = bst.units.IsentropicCompressor('PUMP112', ins=psa_system-0, outs=hydrogen_recycle,
+    rcf_pump_2 = bst.units.IsentropicCompressor('RCF_PUMP2', ins=rcf_psa_1-0, outs=rcf_h2_recycle,
                                               P=3e6, vle=True)
 
-    @h2_pump.add_specification(run=True)
+    @rcf_pump_2.add_specification(run=True)
     def set_h2_pump_phase():
-        h2_pump.outs[0].phase = 'g'
+        rcf_pump_2.outs[0].phase = 'g'
 
-    crude_distillation = bst.units.BinaryDistillation(
-        'DIST113', ins=R102-1,
+    rcf_col_1 = bst.units.BinaryDistillation(
+        'RCF_COL1', ins=rcf_flsh_1-1,
         LHK=('Methanol', 'Water'),
         Lr=0.9995, Hr=1 - 0.967, P=101325,
         vessel_material='Stainless steel 316',
         k=2, partial_condenser=True,
     )
 
-    meoh_purifier_col = bst.units.BinaryDistillation(
-        'DIST114', ins=crude_distillation-0,
+    rcf_col_2 = bst.units.BinaryDistillation(
+        'RCF_COL2', ins=rcf_col_1-0,
         outs=('', 'To_WW_Treatment'),
         LHK=('Methanol', 'Water'),
         y_top=0.9, x_bot=0.001, P=101325, k=2,
     )
 
-    meoh_mixer = bst.units.Mixer('MIX116', ins=(meoh_purifier_col-0, pre_psa_flash-1), rigorous=True)
+    rcf_mix_3 = bst.units.Mixer('RCF_MIX3', ins=(rcf_col_2-0, rcf_flsh_2-1), rigorous=True)
 
-    cooler_2 = bst.units.HXutility('HX117', ins=meoh_mixer.outs[0], outs=meoh_recycle,
+    rcf_hx_4 = bst.units.HXutility('RCF_HX4', ins=rcf_mix_3.outs[0], outs=rcf_meoh_recycle,
                                     V=0, rigorous=True)
 
-    water_remover = bst.units.Flash('FLASH118', ins=crude_distillation-1,
+    rcf_flsh_3 = bst.units.Flash('RCF_FLSH3', ins=rcf_col_1-1,
                                     outs=('To_WW_Treatment_2', 'RCF_Oil'), T=400, P=101325)
 
-    wastewater_mixer = bst.Mixer(
-        ins=(meoh_purifier_col.outs[1], water_remover.outs[0]), outs='RCF_WW'
+    rcf_mix_4 = bst.Mixer('RCF_MIX4',
+        ins=(rcf_col_2.outs[1], rcf_flsh_3.outs[0]), outs='RCF_WW'
     )
 
       # outs[0]: evaporated MeOH/water from pulp — currently unrecovered (future: route to WWT or solvent recovery)
-    pulp_purifier = bst.Flash('D601', solvolysis_reactor.outs[0], outs=('', 'Carbohydrate_Pulp'), T=400, P=1e5)
+    rcf_flsh_4 = bst.Flash('RCF_FLSH4', rcf_rxr_1.outs[0], outs=('', 'Carbohydrate_Pulp'), T=400, P=1e5)
 
 
-    catalyst = bst.Stream(
-        'RCF_Catalyst',
+    rcf_cat_in = bst.Stream(
+        'RCF_CAT_IN',
         NiC=RCF_catalyst['loading'] * (feed_parameters['flow'] * 1e3) * RCF_catalyst['loading'],
         units='kg/yr', price=prices['NiC_catalyst'],
     )
-    catalyst_stream = CatalystMixer(ins=catalyst)
+    rcf_cat_mix = CatalystMixer(ins=rcf_cat_in)
 
     # ── Assemble system ───────────────────────────────────────────────────────
     return bst.System(
         'RCF_System',
         path=(
-            meoh_h2o_mix, meoh_pump, meoh_heater, solvolysis_reactor,
-            h2_mixer, h2_pre_heat, hydrogenolysis_reactor,
-            R102, pre_psa_pump, pre_psa_flash, pre_psa_heater,
-            psa_system, h2_pump, crude_distillation, meoh_purifier_col,
-            meoh_mixer, cooler_2, water_remover, wastewater_mixer, pulp_purifier,
-            catalyst_stream,
+            rcf_mix_1, rcf_pump_1, rcf_hx_1, rcf_rxr_1,
+            rcf_mix_2, rcf_hx_2, rcf_rxr_2,
+            rcf_flsh_1, rcf_comp_1, rcf_flsh_2, rcf_hx_3,
+            rcf_psa_1, rcf_pump_2, rcf_col_1, rcf_col_2,
+            rcf_mix_3, rcf_mix_3, rcf_hx_4, rcf_flsh_3, rcf_mix_4, rcf_flsh_4,
+            rcf_cat_mix,
         ),
-        recycle=(meoh_recycle, hydrogen_recycle),
+        recycle=(rcf_meoh_recycle, rcf_h2_recycle),
     )
