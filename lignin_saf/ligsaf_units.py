@@ -190,7 +190,7 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
 
     def compute_Q_total(self):
         """Return Q_total [m³/hr] from bed geometry alone. No side effects. Callable before simulate()."""
-        dry_biomass_kgday = self.ins[0].imass['Poplar'] * 24.0
+        dry_biomass_kgday = self.ins[0].F_mass * 24.0                   # Previously sized just based on dry biomass weight, but realistically moisture needs to be accounted for 
         cycle_time = self.tau + self.tau_0
         N_total_base = max(2, round(cycle_time / self.tau_0))
         N_working_base = min(N_total_base - 1, max(1, round(N_total_base * self.tau / cycle_time)))

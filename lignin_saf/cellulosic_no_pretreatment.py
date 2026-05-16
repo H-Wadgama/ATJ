@@ -7,8 +7,9 @@
 import biosteam as bst
 import thermosteam as tmo
 from thermosteam import Stream
-from biorefineries.cellulosic.systems.pretreatment import create_dilute_acid_pretreatment_system
+from thermosteam.reaction import Reaction as Rxn, ParallelReaction as ParallelRxn
 from biorefineries.cellulosic.systems.fermentation import create_cellulosic_fermentation_system
+from biorefineries.ethanol import create_ethanol_purification_system
 from biorefineries.cellulosic import streams as s
 from biorefineries.cellulosic import units
 
@@ -97,8 +98,27 @@ def create_cellulosic_ethanol_system(
     #    ins=[U101-0, sulfuric_acid, ammonia],
     #    mockup=True
     #)
+    chems = tmo.settings.chemicals
+    saccharification_rxns = ParallelRxn([
+        # Standard glucan enzymatic hydrolysis (unchanged from pretreatment pathway)
+        Rxn('Glucan -> GlucoseOligomer',               'Glucan',      0.0400, chems),
+        Rxn('Glucan + 0.5 H2O -> 0.5 Cellobiose',     'Glucan',      0.0120, chems),
+        Rxn('Glucan + H2O -> Glucose',                 'Glucan',      0.9000, chems),
+        Rxn('Cellobiose + H2O -> 2 Glucose',           'Cellobiose',  1.0000, chems),
+        # Hemicellulose hydrolysis — same conversions as dilute-acid pretreatment (R201).
+        # Xylose and Arabinose produced here are co-fermented downstream (R301/R303).
+        # Furfural is an acid-dehydration byproduct; retained here to match pretreatment
+        # mass balance but is negligible at these conversions.
+        Rxn('Xylan + H2O -> Xylose',                   'Xylan',       0.9000, chems),
+        Rxn('Xylan + H2O -> XyloseOligomer',           'Xylan',       0.0240, chems),
+        Rxn('Xylan -> Furfural + 2 H2O',               'Xylan',       0.0500, chems),
+        Rxn('Arabinan + H2O -> Arabinose',             'Arabinan',    0.9000, chems),
+        Rxn('Arabinan + H2O -> ArabinoseOligomer',     'Arabinan',    0.0240, chems),
+        Rxn('Arabinan -> Furfural + 2 H2O',            'Arabinan',    0.0050, chems),
+    ])
     fermentation_sys = create_cellulosic_fermentation_system(
         ins=U101-0,
+        saccharification_reactions=saccharification_rxns,
         mockup=True,
     )
     ethanol_purification_sys, udct = create_ethanol_purification_system(
