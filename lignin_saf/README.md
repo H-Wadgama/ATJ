@@ -65,6 +65,7 @@ Current design includes Areas 200, 300, 400, and 500. The HDO upgrading step is 
 | `systems/monomer_purification.py` | `create_monomer_purification_system(ins=None)` — Area 300 hexane LLE monomer/dimer separation factory function |
 | `systems/hdo.py` | `create_hdo_system(ins=None)` — HDO upgrading factory; H₂ and dodecane recycles converged by BioSTEAM |
 | `systems/cellulosic_ethanol.py` | `create_cellulosic_ethanol_system(ins=None, add_denaturant=True)` — `WWT=False, CHP=False`; shared RCF utilities serve the full biorefinery |
+| `cellulosic_no_pretreatment.py` | `create_cellulosic_ethanol_system(ins=None)` — no-pretreatment variant; hemicellulose hydrolysis (Xylan/Arabinan → monomers, same conversions as R201) added to saccharification so yield approaches the pretreatment pathway; hemicellulase cost not charged (documented assumption) |
 | `systems/ligsaf_utilities.py` | `create_rcf_utilities_system()` — Area 400 + 500 factory function; returns `(BT, WWT, gas_mixer)` |
 | `ligsaf_units.py` | Custom BioSTEAM unit classes: `SolvolysisReactor`, `HydrogenolysisReactor`, `HydrodeoxygenationReactor`, `PSA`, `CatalystMixer` |
 | `ligsaf_settings.py` | All process parameters, prices, biomass composition, partition coefficients, `hdo_params` |
@@ -276,6 +277,8 @@ integrated_tea.labor_cost = labor   # overrides default 2.5e6
 ```python
 msp = integrated_tea.solve_price(F.RCF_Monomers)   # [USD/kg]
 ```
+
+_Hemicellulose hydrolysis in the no-pretreatment pathway is catalyzed at no additional enzyme cost_: In `cellulosic_no_pretreatment.py`, Xylan → Xylose (90%) and Arabinan → Arabinose (90%) are added to the saccharification step using the same conversions as dilute-acid pretreatment (R201). The enzyme loading formula in M301 scales only to Glucan mass (`1.2 × Glucan kg`), so no hemicellulase cost is charged for the additional hemicellulose reactions. In reality a xylanase/arabinanase-supplemented cocktail would be required. The no-pretreatment case therefore removes acid + ammonia cost (from pretreatment) without adding an equivalent hemicellulase cost — the net operating cost impact is uncertain until enzyme pricing for a hemicellulase-augmented cocktail is available.
 
 ## Open implementation items
 

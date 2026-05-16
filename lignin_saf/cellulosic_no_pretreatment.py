@@ -106,15 +106,19 @@ def create_cellulosic_ethanol_system(
         Rxn('Glucan + H2O -> Glucose',                 'Glucan',      0.9000, chems),
         Rxn('Cellobiose + H2O -> 2 Glucose',           'Cellobiose',  1.0000, chems),
         # Hemicellulose hydrolysis — same conversions as dilute-acid pretreatment (R201).
-        # Xylose and Arabinose produced here are co-fermented downstream (R301/R303).
-        # Furfural is an acid-dehydration byproduct; retained here to match pretreatment
-        # mass balance but is negligible at these conversions.
+        # Xylose and Arabinose are co-fermented downstream (R301/R303).
+        # Galactan and Mannan only produce oligomers in R201 (no monomer pathway); both go to WWT.
+        # Furfural is an acid-dehydration byproduct retained to match pretreatment mass balance.
         Rxn('Xylan + H2O -> Xylose',                   'Xylan',       0.9000, chems),
         Rxn('Xylan + H2O -> XyloseOligomer',           'Xylan',       0.0240, chems),
         Rxn('Xylan -> Furfural + 2 H2O',               'Xylan',       0.0500, chems),
         Rxn('Arabinan + H2O -> Arabinose',             'Arabinan',    0.9000, chems),
         Rxn('Arabinan + H2O -> ArabinoseOligomer',     'Arabinan',    0.0240, chems),
         Rxn('Arabinan -> Furfural + 2 H2O',            'Arabinan',    0.0050, chems),
+        Rxn('Galactan + H2O -> GalactoseOligomer',     'Galactan',    0.0240, chems),
+        Rxn('Galactan -> HMF + 2 H2O',                 'Galactan',    0.0030, chems),
+        Rxn('Mannan + H2O -> MannoseOligomer',         'Mannan',      0.0030, chems),
+        Rxn('Mannan -> HMF + 2 H2O',                   'Mannan',      0.0030, chems),
     ])
     fermentation_sys = create_cellulosic_fermentation_system(
         ins=U101-0,

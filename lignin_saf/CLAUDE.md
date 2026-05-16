@@ -847,40 +847,41 @@ Slots 0–5 are colorblind-friendly (Wong 2011). Add new entries at the end if m
 
 ## Cellulosic Ethanol Without Pretreatment (`scripts/etoh.py`)
 
-`scripts/etoh.py` is a standalone test script for the RCF + cellulosic ethanol pathway that **skips dilute-acid pretreatment**. The `Carbohydrate_Pulp` from RCF feeds directly into enzymatic saccharification and fermentation via `systems/cellulosic_ethanol_no_preatreatment.py`.
+`scripts/etoh.py` is a standalone test script for the RCF + cellulosic ethanol pathway that **skips dilute-acid pretreatment**. The `Carbohydrate_Pulp` from RCF feeds directly into enzymatic saccharification and fermentation via `cellulosic_no_pretreatment.py` (root of `lignin_saf/`).
 
-### Why ethanol yield is lower without pretreatment
+### Hemicellulose hydrolysis in saccharification
 
-The biorefineries fermentation model has two separate reaction stages with distinct substrates:
+`cellulosic_no_pretreatment.py` passes a custom `saccharification_rxns` to `create_cellulosic_fermentation_system`, extending the default Glucan reactions with hemicellulose hydrolysis at the same conversions as dilute-acid pretreatment (R201):
 
-**Enzymatic saccharification (R301 / R303) — converts Glucan (cellulose) only:**
 ```
-Glucan + H₂O → Glucose  (90%)
-```
-There are no Xylan → Xylose reactions in saccharification. Cellulase enzymes act on cellulose, not hemicellulose.
-
-**Fermentation cofermentation — converts monomeric sugars:**
-```
-Glucose → 2 Ethanol + 2 CO₂   (95% of Glucose)
-3 Xylose → 5 Ethanol + 5 CO₂  (85% of Xylose)
-```
-The fermentor can convert Xylose → Ethanol, but Xylose must already exist as a monomer — it is not produced from Xylan inside the fermentor.
-
-**Dilute-acid pretreatment (R201) does the hemicellulose hydrolysis:**
-```
-Xylan + H₂O → Xylose      (90%)
-Arabinan + H₂O → Arabinose (90%)
+Xylan    + H₂O → Xylose              (90%)   → co-fermented at 85% → Ethanol
+Xylan    + H₂O → XyloseOligomer      (2.4%)  → WWT
+Xylan           → Furfural + 2 H₂O   (5%)    → WWT
+Arabinan + H₂O → Arabinose           (90%)   → co-fermented
+Arabinan + H₂O → ArabinoseOligomer   (2.4%)  → WWT
+Arabinan        → Furfural + 2 H₂O   (0.5%)  → WWT
+Galactan + H₂O → GalactoseOligomer   (2.4%)  → WWT (no fermentation pathway)
+Galactan        → HMF + 2 H₂O        (0.3%)  → WWT
+Mannan   + H₂O → MannoseOligomer     (0.3%)  → WWT (no fermentation pathway)
+Mannan          → HMF + 2 H₂O        (0.3%)  → WWT
 ```
 
-Without pretreatment, all Xylan, Arabinan, Mannan, and Galactan remain as polymers and contribute **zero ethanol**. Poplar is 13.4 wt% Xylan on a dry basis; with pretreatment 90% converts to Xylose and 85% of that ferments to ethanol — a large fraction of total yield. The Carbohydrate_Pulp from RCF retains the full hemicellulose complement, so the entire Xylan pool passes through to WWT unconverted in the no-pretreatment case.
+This closes most of the ethanol yield gap vs. the pretreatment pathway. The remaining difference is that pretreatment charges sulfuric acid + ammonia as chemical costs; this pathway does not.
 
-| Sugar path | With pretreatment | Without pretreatment |
+| Sugar path | With pretreatment | No pretreatment (current model) |
 |---|---|---|
 | Glucan → Glucose → Ethanol | ✓ saccharification | ✓ saccharification |
-| Xylan → Xylose → Ethanol | ✓ acid hydrolysis → fermentation | ✗ Xylan stays as polymer |
-| Arabinan/Mannan/Galactan → Ethanol | ✓ partial | ✗ unconverted |
+| Xylan → Xylose → Ethanol | ✓ acid hydrolysis → fermentation | ✓ saccharification (modeled assumption) |
+| Arabinan → Arabinose → Ethanol | ✓ partial | ✓ saccharification (modeled assumption) |
+| Galactan/Mannan → oligomers → WWT | ✓ minor oligomers only | ✓ same |
 
-This is physically correct behavior — the model accurately reflects that cellulase cannot efficiently break down hemicellulose without prior acid hydrolysis.
+### Hemicellulase enzyme cost — documented assumption
+
+The enzyme loading in `M301` is:
+```python
+M301.loading_basis = lambda: 1.2 * pretreated_biomass.imass['Glucan']
+```
+It scales only to Glucan mass. The Xylan/Arabinan hydrolysis reactions in saccharification are therefore catalyzed at **no additional enzyme cost** — no xylanase or arabinanase stream is added. In reality, a hemicellulase-supplemented enzyme cocktail (e.g. Cellic CTec3 which already contains xylanase activity) would be required. This is a known model simplification: the no-pretreatment case replaces acid cost (H₂SO₄ + NH₃) with implied hemicellulase activity that is not separately priced. The net effect on operating cost is uncertain in sign and magnitude until enzyme pricing data for a hemicellulase-augmented cocktail are available.
 
 ### Assembly pattern (`scripts/etoh.py`)
 
@@ -914,8 +915,11 @@ combined_system.simulate()
 ```
 
 **Differences from `scripts/rcf_etoh.py` (with pretreatment):**
+- Uses `cellulosic_no_pretreatment.py` (root) instead of `systems/cellulosic_ethanol.py`
 - No oil or monomer purification systems — only RCF and ethanol sections
 - `etoh_ww` contains only `S401.outs[1]`; `F.pretreatment_wastewater` does not exist
+- No sulfuric acid or ammonia chemical costs (pretreatment chemicals removed)
+- Hemicellulose hydrolysis occurs in saccharification; hemicellulase cost not charged (see "Hemicellulase enzyme cost" note above)
 - WWT inlets are `F.RCF_WW` + stillage filtrate only (no EtOAc/hexane LLE wastewater)
 - `gas_mixer` receives `F.Purge_Light_Gases` (RCF PSA); no ETJ or HDO purge gases
 - WWT is constructed inline rather than via `create_rcf_utilities_system()`, because that function expects `WW_10`, `WastePulp`, `WW_11`, `WW_12` (streams from oil/monomer purification that don't exist here)
@@ -933,7 +937,7 @@ combined_system.simulate()
 | `systems/rcf_oil_purification.py` | `create_rcf_oil_purification_system(ins=None)` — Area 300 EtOAc LLE factory function |
 | `systems/monomer_purification.py` | `create_monomer_purification_system(ins=None)` — Area 300 hexane LLE monomer/dimer separation factory function |
 | `systems/cellulosic_ethanol.py` | `create_cellulosic_ethanol_system(ins=None, add_denaturant=True)` — includes dilute-acid pretreatment; `WWT=False, CHP=False` always; pass `add_denaturant=False` when ethanol routes to ETJ. |
-| `systems/cellulosic_ethanol_no_preatreatment.py` | `create_cellulosic_ethanol_system(ins=None, add_denaturant=True)` — **no pretreatment variant**; feeds `Carbohydrate_Pulp` directly into enzymatic saccharification. Lower ethanol yield because hemicellulose (Xylan, Arabinan, etc.) is not hydrolyzed to fermentable sugars. See "Cellulosic Ethanol Without Pretreatment" section. |
+| `cellulosic_no_pretreatment.py` | `create_cellulosic_ethanol_system(ins=None)` — **no pretreatment variant** (root of `lignin_saf/`); feeds `Carbohydrate_Pulp` directly into enzymatic saccharification with hemicellulose hydrolysis reactions added (Xylan/Arabinan → monomers at same conversions as R201; Galactan/Mannan → oligomers only). Hemicellulase cost not charged — see "Cellulosic Ethanol Without Pretreatment" section. |
 | `systems/hdo.py` | `create_hdo_system(ins=None)` — HDO upgrading factory; H₂ and dodecane recycles converged by BioSTEAM |
 | `systems/ligsaf_utilities.py` | `create_rcf_utilities_system()` — Area 400 + 500; returns `(BT, WWT, gas_mixer)`; expects `WW_10`, `WastePulp`, `WW_11`, `WW_12` from oil/monomer purification — not suitable for the no-purification `scripts/etoh.py` assembly |
 | `scripts/rcf_etoh.py` | Entry-point script: full integrated system (RCF + oil purification + monomer purification + ethanol **with** pretreatment) |

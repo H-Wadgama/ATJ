@@ -115,7 +115,7 @@ def create_rcf_system(ins=None):
     ])
 
     # Deacetylation
-    deacetylation = bst.Reaction('Acetate -> AceticAcid', reactant = 'Acetate', X = 1.0)
+    deacetylation = bst.Reaction('Acetate -> AceticAcid', reactant = 'Acetate', X = 1.0) # From https://doi.org/10.1002/cssc.201601121
 
     rcf_rxr_1 = SolvolysisReactor(
         'RCF_RXR1',
