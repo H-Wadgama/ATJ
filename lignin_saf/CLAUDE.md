@@ -854,6 +854,7 @@ Slots 0–5 are colorblind-friendly (Wong 2011). Add new entries at the end if m
 `cellulosic_no_pretreatment.py` passes a custom `saccharification_rxns` to `create_cellulosic_fermentation_system`, extending the default Glucan reactions with hemicellulose hydrolysis at the same conversions as dilute-acid pretreatment (R201):
 
 ```
+Glucan          → HMF + 2 H₂O        (0.3%)  → WWT (matches R201 degradation in pretreatment pathway)
 Xylan    + H₂O → Xylose              (90%)   → co-fermented at 85% → Ethanol
 Xylan    + H₂O → XyloseOligomer      (2.4%)  → WWT
 Xylan           → Furfural + 2 H₂O   (5%)    → WWT
@@ -871,6 +872,7 @@ This closes most of the ethanol yield gap vs. the pretreatment pathway. The rema
 | Sugar path | With pretreatment | No pretreatment (current model) |
 |---|---|---|
 | Glucan → Glucose → Ethanol | ✓ saccharification | ✓ saccharification |
+| Glucan → HMF (loss) | 0.3% in R201 | 0.3% in saccharification (added to match) |
 | Xylan → Xylose → Ethanol | ✓ acid hydrolysis → fermentation | ✓ saccharification (modeled assumption) |
 | Arabinan → Arabinose → Ethanol | ✓ partial | ✓ saccharification (modeled assumption) |
 | Galactan/Mannan → oligomers → WWT | ✓ minor oligomers only | ✓ same |
@@ -941,7 +943,7 @@ combined_system.simulate()
 | `systems/hdo.py` | `create_hdo_system(ins=None)` — HDO upgrading factory; H₂ and dodecane recycles converged by BioSTEAM |
 | `systems/ligsaf_utilities.py` | `create_rcf_utilities_system()` — Area 400 + 500; returns `(BT, WWT, gas_mixer)`; expects `WW_10`, `WastePulp`, `WW_11`, `WW_12` from oil/monomer purification — not suitable for the no-purification `scripts/etoh.py` assembly |
 | `scripts/rcf_etoh.py` | Entry-point script: full integrated system (RCF + oil purification + monomer purification + ethanol **with** pretreatment) |
-| `scripts/etoh.py` | Entry-point script: RCF + cellulosic ethanol **without** pretreatment. `Carbohydrate_Pulp` feeds directly to fermentation. WWT and BT assembled inline. Lower ethanol yield — see "Cellulosic Ethanol Without Pretreatment" section. |
+| `scripts/etoh.py` | Entry-point script: RCF + cellulosic ethanol **without** pretreatment. `Carbohydrate_Pulp` feeds directly to fermentation. WWT and BT assembled inline. Produces slightly more ethanol than the pretreatment pathway in simulation — see "Cellulosic Ethanol Without Pretreatment" section. |
 | `scripts/rcf_etoh_etj.py` | Entry-point script for the fully integrated RCF + cellulosic ethanol + ETJ biorefinery. Poplar → RCF lignin monomers co-produced with SAF/RN/RD from ETJ upgrading of cellulosic ethanol. Uses `systems/cellulosic_ethanol.create_cellulosic_ethanol_system(add_denaturant=False)` so all ethanol routes to ETJ. Shared utilities (BT, WWT) serve all three areas. See "RCF + ETJ Integrated Biorefinery" section for integration details and open TEA items. |
 | `scripts/rcf_hdo.py` | Entry-point script: builds and simulates the RCF + HDO upgrading system. Poplar → RCF lignin monomers → propylcyclohexane (`SAF_CycloAlkane`). HDO purge gases routed to `gas_mixer` → BT; HDO wastewater routed to WWT via `M601.ins`. No cellulosic ethanol co-product in this script. |
 

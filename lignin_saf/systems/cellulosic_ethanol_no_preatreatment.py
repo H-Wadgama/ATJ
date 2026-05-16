@@ -15,6 +15,7 @@ utilities serve the full biorefinery.
 
 import biosteam as bst
 import thermosteam as tmo
+from thermosteam.reaction import Reaction as Rxn, ParallelReaction as ParallelRxn
 from biorefineries.cellulosic.systems.fermentation import create_cellulosic_fermentation_system
 from biorefineries.ethanol import create_ethanol_purification_system
 from biorefineries.cellulosic import streams as s
@@ -30,8 +31,31 @@ __all__ = ('create_cellulosic_ethanol_system',)
 def create_cellulosic_ethanol_system(ins, outs, add_denaturant=True):
     pulp, denaturant = ins
     ethanol, = outs
+    chems = tmo.settings.chemicals
+    saccharification_rxns = ParallelRxn([
+        # Standard glucan enzymatic hydrolysis (unchanged from pretreatment pathway)
+        Rxn('Glucan -> GlucoseOligomer',               'Glucan',      0.0400, chems),
+        Rxn('Glucan + 0.5 H2O -> 0.5 Cellobiose',     'Glucan',      0.0120, chems),
+        Rxn('Glucan + H2O -> Glucose',                 'Glucan',      0.9000, chems),
+        Rxn('Glucan -> HMF + 2 H2O',                   'Glucan',      0.0030, chems),
+        Rxn('Cellobiose + H2O -> 2 Glucose',           'Cellobiose',  1.0000, chems),
+        # Hemicellulose hydrolysis — same conversions as dilute-acid pretreatment (R201).
+        # Xylose and Arabinose are co-fermented downstream (R301/R303).
+        # Galactan and Mannan only produce oligomers/degradation products (no monomer fermentation pathway).
+        Rxn('Xylan + H2O -> Xylose',                   'Xylan',       0.9000, chems),
+        Rxn('Xylan + H2O -> XyloseOligomer',           'Xylan',       0.0240, chems),
+        Rxn('Xylan -> Furfural + 2 H2O',               'Xylan',       0.0500, chems),
+        Rxn('Arabinan + H2O -> Arabinose',             'Arabinan',    0.9000, chems),
+        Rxn('Arabinan + H2O -> ArabinoseOligomer',     'Arabinan',    0.0240, chems),
+        Rxn('Arabinan -> Furfural + 2 H2O',            'Arabinan',    0.0050, chems),
+        Rxn('Galactan + H2O -> GalactoseOligomer',     'Galactan',    0.0240, chems),
+        Rxn('Galactan -> HMF + 2 H2O',                 'Galactan',    0.0030, chems),
+        Rxn('Mannan + H2O -> MannoseOligomer',         'Mannan',      0.0030, chems),
+        Rxn('Mannan -> HMF + 2 H2O',                   'Mannan',      0.0030, chems),
+    ])
     fermentation_sys = create_cellulosic_fermentation_system(
         ins=pulp,
+        saccharification_reactions=saccharification_rxns,
         mockup=True,
     )
     ethanol_purification_sys, udct = create_ethanol_purification_system(
