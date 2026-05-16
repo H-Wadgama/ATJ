@@ -114,6 +114,9 @@ def create_rcf_system(ins=None):
                      X=solvolysis_parameters['MeOH_CO'], basis='wt', correct_atomic_balance=False),
     ])
 
+    # Deacetylation
+    deacetylation = bst.Reaction('Acetate -> AceticAcid', reactant = 'Acetate', X = 1.0)
+
     rcf_rxr_1 = SolvolysisReactor(
         'RCF_RXR1',
         ins=(ins, rcf_hx_1-0),
@@ -130,6 +133,7 @@ def create_rcf_system(ins=None):
         V_max_limit=V_max_limit,                   # hard upper bound on vessel volume
         reaction_1=solvolysis_rxn,
         reaction_2=methanol_decomposition_rxn,
+        reaction_3 = deacetylation
     )
 
     # H2 mixer: adjusts fresh H2 to make up for recycle shortfall

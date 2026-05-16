@@ -157,7 +157,8 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
             LD_max: Optional[float] = None,
             *,
             reaction_1,
-            reaction_2
+            reaction_2,
+            reaction_3
             ):
 
 
@@ -179,6 +180,7 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         self.LD_max          = self.LD_max_default          if LD_max          is None else LD_max
         self.reaction_1 = reaction_1
         self.reaction_2 = reaction_2
+        self.reaction_3 = reaction_3
         pump_1 = self.auxiliary('pump_1', bst.Pump, ins = self.ins[1])
         # heat_exchanger_1 = self.auxiliary('heat_exchanger_1', bst.HXutility, pump_1.outs[0])
 
@@ -302,7 +304,6 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         self.reaction_1(used_biomass) 
         self.reaction_2(used_solvent)
 
-
         solubilized_lignin = used_biomass.imass['SolubleLignin'] 
         used_solvent.imass['l', 'SolubleLignin'] += solubilized_lignin      # Soluble lignin dissolves in solvent effluent stream 
         used_biomass.imass['SolubleLignin'] = 0                             # No soluble lignin remaining in biomass (assuming 100% extraction efficiency)
@@ -319,6 +320,7 @@ class SolvolysisReactor(bst.Unit, bst.units.design_tools.PressureVessel):
         used_solvent.imass['l', 'Acetate'] =  acetate *(1-solvolysis_parameters['Acetate_retention']) # Assuming acetate dissolves as acetic acid with methanol,
                                                                              # BioSTEAM Chemicals assumes same properties for acetic acid and acetate, otherwise is acetate was a pseudocomponent, it might have still stayed in solid phase
         used_biomass.imass['Acetate'] = acetate*solvolysis_parameters['Acetate_retention']
+        self.reaction_3(used_solvent)
 
 
         cellulose_mass = used_biomass.imass['Glucan']
