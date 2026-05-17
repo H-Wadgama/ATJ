@@ -32,17 +32,19 @@ def create_cellulosic_ethanol_system(ins, outs, add_denaturant=True):
     pulp, denaturant = ins
     ethanol, = outs
     chems = tmo.settings.chemicals
+    # Glucan saccharification reactions are intentionally omitted here.
+    # R303 (SaccharificationAndCoFermentation) always runs its own default
+    # Glucan reactions (90% Glucan → Glucose) regardless of what is passed
+    # to create_cellulosic_fermentation_system. Including Glucan reactions
+    # here would cause a double-application: R301 converts 90% of all Glucan,
+    # then R303 converts 90% of the residual 4.2%, inflating total yield to
+    # ~95% vs the ~91.5% achieved by the pretreatment pathway.
+    # Only hemicellulose hydrolysis is specified — replacing what dilute-acid
+    # pretreatment (R201) would have done at the same conversions.
     saccharification_rxns = ParallelRxn([
-        # Standard glucan enzymatic hydrolysis (unchanged from pretreatment pathway)
-        Rxn('Glucan -> GlucoseOligomer',               'Glucan',      0.0400, chems),
-        Rxn('Glucan + H2O -> GlucoseOligomer',         'Glucan',      0.0030, chems),
-        Rxn('Glucan + 0.5 H2O -> 0.5 Cellobiose',     'Glucan',      0.0120, chems),
-        Rxn('Glucan + H2O -> Glucose',                 'Glucan',      0.9000, chems),
-        Rxn('Glucan -> HMF + 2 H2O',                   'Glucan',      0.0030, chems),
-        Rxn('Cellobiose + H2O -> 2 Glucose',           'Cellobiose',  1.0000, chems),
         # Hemicellulose hydrolysis — same conversions as dilute-acid pretreatment (R201).
-        # Xylose and Arabinose are co-fermented downstream (R301/R303).
-        # Galactan and Mannan only produce oligomers/degradation products (no monomer fermentation pathway).
+        # Xylose and Arabinose are co-fermented downstream.
+        # Galactan and Mannan only produce oligomers/degradation products (no fermentation pathway).
         Rxn('Xylan + H2O -> Xylose',                   'Xylan',       0.9000, chems),
         Rxn('Xylan + H2O -> XyloseOligomer',           'Xylan',       0.0240, chems),
         Rxn('Xylan -> Furfural + 2 H2O',               'Xylan',       0.0500, chems),

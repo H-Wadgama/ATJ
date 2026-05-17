@@ -65,7 +65,7 @@ Current design includes Areas 200, 300, 400, and 500. The HDO upgrading step is 
 | `systems/monomer_purification.py` | `create_monomer_purification_system(ins=None)` — Area 300 hexane LLE monomer/dimer separation factory function |
 | `systems/hdo.py` | `create_hdo_system(ins=None)` — HDO upgrading factory; H₂ and dodecane recycles converged by BioSTEAM |
 | `systems/cellulosic_ethanol.py` | `create_cellulosic_ethanol_system(ins=None, add_denaturant=True)` — `WWT=False, CHP=False`; shared RCF utilities serve the full biorefinery |
-| `cellulosic_no_pretreatment.py` | `create_cellulosic_ethanol_system(ins=None)` — no-pretreatment variant; hemicellulose hydrolysis (Xylan/Arabinan → monomers, same conversions as R201) added to saccharification so yield approaches the pretreatment pathway; hemicellulase cost not charged (documented assumption) |
+| `cellulosic_no_pretreatment.py` | `create_cellulosic_ethanol_system(ins=None)` — no-pretreatment variant; only hemicellulose reactions in `saccharification_rxns` (Xylan/Arabinan → monomers at R201 conversions; Galactan/Mannan → oligomers); Glucan omitted from `saccharification_rxns` — handled by R303 defaults to avoid double-application; hemicellulase cost not charged (documented assumption) |
 | `systems/ligsaf_utilities.py` | `create_rcf_utilities_system()` — Area 400 + 500 factory function; returns `(BT, WWT, gas_mixer)` |
 | `ligsaf_units.py` | Custom BioSTEAM unit classes: `SolvolysisReactor`, `HydrogenolysisReactor`, `HydrodeoxygenationReactor`, `PSA`, `CatalystMixer` |
 | `ligsaf_settings.py` | All process parameters, prices, biomass composition, partition coefficients, `hdo_params` |
