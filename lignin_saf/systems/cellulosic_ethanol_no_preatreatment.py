@@ -35,6 +35,7 @@ def create_cellulosic_ethanol_system(ins, outs, add_denaturant=True):
     saccharification_rxns = ParallelRxn([
         # Standard glucan enzymatic hydrolysis (unchanged from pretreatment pathway)
         Rxn('Glucan -> GlucoseOligomer',               'Glucan',      0.0400, chems),
+        Rxn('Glucan + H2O -> GlucoseOligomer',         'Glucan',      0.0030, chems),
         Rxn('Glucan + 0.5 H2O -> 0.5 Cellobiose',     'Glucan',      0.0120, chems),
         Rxn('Glucan + H2O -> Glucose',                 'Glucan',      0.9000, chems),
         Rxn('Glucan -> HMF + 2 H2O',                   'Glucan',      0.0030, chems),

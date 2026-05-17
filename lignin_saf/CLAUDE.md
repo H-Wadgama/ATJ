@@ -854,6 +854,7 @@ Slots 0–5 are colorblind-friendly (Wong 2011). Add new entries at the end if m
 `cellulosic_no_pretreatment.py` passes a custom `saccharification_rxns` to `create_cellulosic_fermentation_system`, extending the default Glucan reactions with hemicellulose hydrolysis at the same conversions as dilute-acid pretreatment (R201):
 
 ```
+Glucan   + H₂O → GlucoseOligomer     (0.3%)  → WWT (matches R201 partial hydrolysis in pretreatment pathway)
 Glucan          → HMF + 2 H₂O        (0.3%)  → WWT (matches R201 degradation in pretreatment pathway)
 Xylan    + H₂O → Xylose              (90%)   → co-fermented at 85% → Ethanol
 Xylan    + H₂O → XyloseOligomer      (2.4%)  → WWT
@@ -872,6 +873,7 @@ This closes most of the ethanol yield gap vs. the pretreatment pathway. The rema
 | Sugar path | With pretreatment | No pretreatment (current model) |
 |---|---|---|
 | Glucan → Glucose → Ethanol | ✓ saccharification | ✓ saccharification |
+| Glucan + H₂O → GlucoseOligomer (loss) | 0.3% in R201 | 0.3% in saccharification (added to match) |
 | Glucan → HMF (loss) | 0.3% in R201 | 0.3% in saccharification (added to match) |
 | Xylan → Xylose → Ethanol | ✓ acid hydrolysis → fermentation | ✓ saccharification (modeled assumption) |
 | Arabinan → Arabinose → Ethanol | ✓ partial | ✓ saccharification (modeled assumption) |
